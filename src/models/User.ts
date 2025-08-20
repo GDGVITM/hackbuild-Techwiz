@@ -14,7 +14,7 @@ const UserSchema: Schema = new Schema(
     passwordHash: { type: String, required: true },
     role: { type: String, enum: ["student", "business", "admin"], required: true },
   },
-  { timestamps: true }
+  { timestamps: true }  
 );
 
 export default mongoose.models.User || mongoose.model<IUser>("User", UserSchema);
