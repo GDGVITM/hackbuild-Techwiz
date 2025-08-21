@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import ProposalList from '@/components/business/ProposalList';
+import ProposalList from '@/components/dashboard/ProposalList';
 import { useAuth } from '@/context/AuthContext';
 
 export default function BusinessProposalsPage() {
