@@ -1,28 +1,42 @@
 import mongoose from 'mongoose';
-import dotenv from dotenv;
 
-dotenv.config();
+const MONGODB_URI = process.env.DATABASE_URL;
 
-type ConnectionObject = {
-  isConnected?: number
+if (!MONGODB_URI) {
+  throw new Error('Please define the DATABASE_URL environment variable inside .env');
 }
 
-const connection: ConnectionObject = {}
+let cached = global.mongoose;
 
-async function dbConnect(): Promise<void> {
-  if (connection.isConnected){
-    console.log('already connected to database');
-    return
+if (!cached) {
+  cached = global.mongoose = { conn: null, promise: null };
+}
+
+async function dbConnect() {
+  if (cached.conn) {
+    return cached.conn;
   }
 
-  try{
-    const db = await mongoose.connect(process.env.MONGODB_URI || "",{})
-    connection.isConnected = db.connections[0].readyState
-    console.log('DB connected Successfully');
-  } catch(error){
-    console.log('Connection Failed', error);
-    process.exit(1);
+  if (!cached.promise) {
+    const opts = {
+      bufferCommands: false,
+    };
+
+    cached.promise = mongoose.connect(MONGODB_URI, opts)
+      .then(mongoose => {
+        console.log('DB connected Successfully');
+        return mongoose;
+      });
   }
+
+  try {
+    cached.conn = await cached.promise;
+  } catch (e) {
+    cached.promise = null;
+    throw e;
+  }
+
+  return cached.conn;
 }
 
 export default dbConnect;
