@@ -1,19 +1,55 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import JobCard from '@/components/business/JobCard';
 import { Job } from '@/types/job';
 import CreateJobForm from './CreateJobForm';
 
 export default function BusinessDashboard() {
-  const [jobs, setJobs] = useState<Job[]>([]);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
 
   const handleJobCreated = (newJob: Job) => {
     setJobs([newJob, ...jobs]);
     setShowCreateForm(false);
   };
+
+    useEffect(() => {
+    const fetchJobs = async () => {
+      try {
+        const response = await fetch('/api/jobs');
+        const data = await response.json();
+        
+        if (response.ok) {
+          setJobs(data.jobs);
+        } else {
+          setError(data.error || 'Failed to fetch jobs');
+        }
+      } catch (err) {
+        setError('An error occurred. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchJobs();
+  }, []);
+
+  if (loading) {
+    return <div className="text-center py-10">Loading jobs...</div>;
+  }
+
+  if (error) {
+    return <div className="text-center py-10 text-red-600">{error}</div>;
+  }
+
+  if (jobs.length === 0) {
+    return <div className="text-center py-10">No jobs available at the moment.</div>;
+  }
 
   return (
     <div className="container mx-auto px-4 py-8">
