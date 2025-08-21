@@ -4,16 +4,16 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { getAuthCookie, removeAuthCookie } from '@/lib/utils/cookies';
-import {useAuth} from '@/contexts/AuthContext';
+import { useAuth } from '@/context/AuthContext';
 
 export default function Navbar() {
-  const { user,logout} = useAuth();
+  const { user, logout } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     const authData = getAuthCookie();
     if (authData) {
-    //   setUser(authData.user);
+      //   setUser(authData.user);
     }
   }, []);
 
@@ -32,7 +32,7 @@ export default function Navbar() {
               FreelanceHub
             </Link>
           </div>
-          
+
           <div className="flex items-center space-x-4">
             {user ? (
               <>
