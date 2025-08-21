@@ -1,4 +1,3 @@
-// src/components/business/ProposalList.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -31,9 +30,10 @@ interface Proposal {
 
 interface ProposalListProps {
   jobId?: string;
+  status?: string;
 }
 
-export default function ProposalList({ jobId }: ProposalListProps) {
+export default function ProposalList({ jobId, status }: ProposalListProps) {
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loading, setLoading] = useState(true);
   const { token } = useAuth();
@@ -41,7 +41,16 @@ export default function ProposalList({ jobId }: ProposalListProps) {
   useEffect(() => {
     const fetchProposals = async () => {
       try {
-        const url = jobId ? `/api/proposals?jobId=${jobId}` : '/api/proposals';
+        let url = '/api/proposals';
+        const params = new URLSearchParams();
+        
+        if (jobId) params.append('jobId', jobId);
+        if (status) params.append('status', status);
+        
+        if (params.toString()) {
+          url += `?${params.toString()}`;
+        }
+        
         const response = await fetch(url, {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -59,9 +68,9 @@ export default function ProposalList({ jobId }: ProposalListProps) {
     if (token) {
       fetchProposals();
     }
-  }, [token, jobId]);
+  }, [token, jobId, status]);
 
-  const handleUpdateStatus = async (proposalId: string, status: 'accepted' | 'rejected') => {
+  const handleUpdateStatus = async (proposalId: string, newStatus: 'accepted' | 'rejected') => {
     try {
       const response = await fetch(`/api/proposals/${proposalId}`, {
         method: 'PUT',
@@ -69,12 +78,12 @@ export default function ProposalList({ jobId }: ProposalListProps) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status: newStatus }),
       });
 
       if (response.ok) {
         setProposals(proposals.map(p => 
-          p._id === proposalId ? { ...p, status } : p
+          p._id === proposalId ? { ...p, status: newStatus } : p
         ));
       }
     } catch (error) {

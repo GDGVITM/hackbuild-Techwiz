@@ -1,7 +1,7 @@
-// src/app/(dashboard)/student/proposals/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/context/AuthContext';
@@ -88,7 +88,11 @@ export default function StudentProposalsPage() {
             <CardHeader>
               <div className="flex justify-between items-start">
                 <div>
-                  <CardTitle className="text-lg">{proposal.jobId.title}</CardTitle>
+                  <CardTitle className="text-lg">
+                    <Link href={`/dashboard/student/proposals/${proposal._id}`} className="hover:text-blue-600">
+                      {proposal.jobId.title}
+                    </Link>
+                  </CardTitle>
                   <CardDescription>
                     Submitted on {new Date(proposal.submittedAt).toLocaleDateString()}
                   </CardDescription>
@@ -97,22 +101,15 @@ export default function StudentProposalsPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <p className="mb-4">{proposal.coverLetter}</p>
-              
-              <div className="mb-4">
-                <h4 className="font-medium mb-2">Milestones:</h4>
-                <ul className="space-y-1">
-                  {proposal.milestones.map((milestone, index) => (
-                    <li key={index} className="flex justify-between text-sm">
-                      <span>{milestone.title}</span>
-                      <span>${milestone.amount}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              <p className="mb-4">{proposal.coverLetter.substring(0, 150)}...</p>
               
               <div className="flex justify-between items-center">
                 <span className="font-medium">Total: ${proposal.quoteAmount}</span>
+                <Link href={`/dashboard/student/proposals/${proposal._id}`}>
+                  <button className="text-blue-600 hover:text-blue-800">
+                    View Details
+                  </button>
+                </Link>
               </div>
             </CardContent>
           </Card>

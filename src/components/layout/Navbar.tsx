@@ -20,7 +20,7 @@ export default function Navbar() {
   const handleLogout = () => {
     logout();
     // setUser(null);
-    router.push('/login');
+    router.push('/');
   };
 
   return (

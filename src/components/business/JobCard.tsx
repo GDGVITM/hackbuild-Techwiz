@@ -1,10 +1,28 @@
 'use client';
-
-import { useState } from 'react';
+import { useAuth } from '@/context/AuthContext';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Job } from '@/types/job';
 
-export default function JobCard({ job }: { job: Job }) {
-  const [showDetails, setShowDetails] = useState(false);
+interface JobCardProps {
+  job: Job;
+}
+
+export default function JobCard({ job }: JobCardProps) {
+  const { user } = useAuth();
+  const router = useRouter();
+
+  const handleViewDetails = () => {
+    if (user?.role === 'student') {
+      router.push(`/dashboard/student/jobs/${job._id}`);
+    } else if (user?.role === 'business') {
+      router.push(`/dashboard/business/jobs/${job._id}`);
+    }
+  };
+
+  const handleSubmitProposal = () => {
+    router.push(`/dashboard/student/jobs/${job._id}?action=submit`);
+  };
 
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden">
@@ -24,28 +42,24 @@ export default function JobCard({ job }: { job: Job }) {
           <span className="text-green-600 font-medium">
             ${job.budgetMin} - ${job.budgetMax}
           </span>
-          <button
-            onClick={() => setShowDetails(!showDetails)}
-            className="text-blue-600 hover:text-blue-800"
-          >
-            {showDetails ? 'Hide Details' : 'View Details'}
-          </button>
+          <div className="flex space-x-2">
+            <button
+              onClick={handleViewDetails}
+              className="text-blue-600 hover:text-blue-800 text-sm"
+            >
+              View Details
+            </button>
+            {user?.role === 'student' && (
+              <button
+                onClick={handleSubmitProposal}
+                className="bg-blue-600 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-700"
+              >
+                Submit Proposal
+              </button>
+            )}
+          </div>
         </div>
       </div>
-      
-      {showDetails && (
-        <div className="px-4 pb-4 border-t">
-          <h4 className="font-medium mt-3 mb-2">Milestones:</h4>
-          <ul className="space-y-2">
-            {job.milestones.map((milestone, index) => (
-              <li key={index} className="flex justify-between">
-                <span>{milestone.title}</span>
-                <span>${milestone.amount}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
     </div>
   );
 }

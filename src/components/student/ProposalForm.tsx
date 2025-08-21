@@ -1,11 +1,10 @@
-// src/components/student/ProposalForm.tsx
 'use client';
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+// import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/context/AuthContext';
 
 interface Milestone {
