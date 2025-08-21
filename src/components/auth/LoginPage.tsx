@@ -93,7 +93,7 @@ export default function LoginForm() {
           </form>
           <div className="mt-6 text-center">
             <p className="text-gray-300">
-              Don't have an account?{" "}
+              Don't have an account?{' '}
               <button
                 onClick={handleNavigateToSignUp}
                 className="text-blue-400 hover:text-blue-300 font-medium transition-colors duration-200"
