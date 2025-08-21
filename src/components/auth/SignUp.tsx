@@ -1,32 +1,83 @@
-"use client"
-
-import { useState } from "react"
+'use client';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
-interface SignUpPageProps {
-    onNavigateToLogin: () => void
-}
+export default function SignUpForm() {
+    const [username, setUsername] = useState("");
+    const [phoneNumber, setPhoneNumber] = useState("");
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
+    const [confirmPassword, setConfirmPassword] = useState("");
+    const [role, setRole] = useState("student");
+    const [error, setError] = useState("");
+    const router = useRouter();
 
-export default function SignUpPage({ onNavigateToLogin }: SignUpPageProps) {
-    const [username, setUsername] = useState("")
-    const [phoneNumber, setPhoneNumber] = useState("")
-    const [email, setEmail] = useState("")
-    const [password, setPassword] = useState("")
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError("");
+
+        // Basic validation
+        if (!username || !email || !password) {
+            setError("Please fill in all required fields");
+            return;
+        }
+
+        if (password !== confirmPassword) {
+            setError("Passwords do not match");
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/auth/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    username,
+                    phoneNumber,
+                    email,
+                    password,
+                    role
+                }),
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                // Redirect to login page on successful registration
+                router.push('./login');
+            } else {
+                setError(data.error || 'Registration failed');
+            }
+        } catch (err) {
+            setError('An error occurred. Please try again.');
+        }
+    };
+
+    const handleNavigateToLogin = () => {
+        router.push('./login');
+    };
 
     return (
-        <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-900 to-purple-900">
             <div className="w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-700">
                 <div className="backdrop-blur-lg bg-white/10 border border-white/20 rounded-2xl p-8 shadow-2xl">
                     <div className="text-center mb-8">
                         <h1 className="text-3xl font-bold text-white mb-2">Create Your Account</h1>
-                        <p className="text-gray-300">Get started with a new account in seconds.</p>
+                        <p className="text-gray-200">Get started with a new account in seconds.</p>
                     </div>
 
-                    <form className="space-y-6">
+                    {error && (
+                        <div className="mb-6 p-3 bg-red-500/20 border border-red-500/30 text-red-200 rounded-lg backdrop-blur-sm">
+                            {error}
+                        </div>
+                    )}
+
+                    <form onSubmit={handleSubmit} className="space-y-6">
                         <div className="space-y-2">
-                            <Label htmlFor="username" className="text-white font-medium">
+                            <Label htmlFor="username" className="text-gray-200 font-medium">
                                 Username
                             </Label>
                             <Input
@@ -36,11 +87,12 @@ export default function SignUpPage({ onNavigateToLogin }: SignUpPageProps) {
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
                                 className="bg-white/10 border-white/20 text-white placeholder:text-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/50 transition-all duration-200"
+                                required
                             />
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="phone" className="text-white font-medium">
+                            <Label htmlFor="phone" className="text-gray-200 font-medium">
                                 Phone Number
                             </Label>
                             <Input
@@ -54,7 +106,7 @@ export default function SignUpPage({ onNavigateToLogin }: SignUpPageProps) {
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="email" className="text-white font-medium">
+                            <Label htmlFor="email" className="text-gray-200 font-medium">
                                 Email
                             </Label>
                             <Input
@@ -64,11 +116,27 @@ export default function SignUpPage({ onNavigateToLogin }: SignUpPageProps) {
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 className="bg-white/10 border-white/20 text-white placeholder:text-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/50 transition-all duration-200"
+                                required
                             />
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="password" className="text-white font-medium">
+                            <Label htmlFor="role" className="text-gray-200 font-medium">
+                                I am a
+                            </Label>
+                            <select
+                                id="role"
+                                value={role}
+                                onChange={(e) => setRole(e.target.value)}
+                                className="w-full px-3 py-2 bg-white/10 border border-white/20 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400/50"
+                            >
+                                <option value="student" className="text-black">Student</option>
+                                <option value="business" className="text-black">Business</option>
+                            </select>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="password" className="text-gray-200 font-medium">
                                 Password
                             </Label>
                             <Input
@@ -78,6 +146,22 @@ export default function SignUpPage({ onNavigateToLogin }: SignUpPageProps) {
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 className="bg-white/10 border-white/20 text-white placeholder:text-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/50 transition-all duration-200"
+                                required
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="confirmPassword" className="text-gray-200 font-medium">
+                                Confirm Password
+                            </Label>
+                            <Input
+                                id="confirmPassword"
+                                type="password"
+                                placeholder="Confirm your password"
+                                value={confirmPassword}
+                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                className="bg-white/10 border-white/20 text-white placeholder:text-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/50 transition-all duration-200"
+                                required
                             />
                         </div>
 
@@ -90,10 +174,10 @@ export default function SignUpPage({ onNavigateToLogin }: SignUpPageProps) {
                     </form>
 
                     <div className="mt-6 text-center">
-                        <p className="text-gray-300">
+                        <p className="text-gray-200">
                             Already have an account?{" "}
                             <button
-                                onClick={onNavigateToLogin}
+                                onClick={handleNavigateToLogin}
                                 className="text-blue-400 hover:text-blue-300 font-medium transition-colors duration-200"
                             >
                                 Log In
@@ -103,5 +187,5 @@ export default function SignUpPage({ onNavigateToLogin }: SignUpPageProps) {
                 </div>
             </div>
         </div>
-    )
+    );
 }
