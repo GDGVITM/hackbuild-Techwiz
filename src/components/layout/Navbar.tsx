@@ -3,21 +3,23 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
+import { getAuthCookie, removeAuthCookie } from '@/lib/utils/cookies';
+import {useAuth} from '@/contexts/AuthContext';
 
 export default function Navbar() {
-  const [user, setUser] = useState(null);
+  const { user,logout} = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
+    const authData = getAuthCookie();
+    if (authData) {
+    //   setUser(authData.user);
     }
   }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    logout();
+    // setUser(null);
     router.push('/login');
   };
 
