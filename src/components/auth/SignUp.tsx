@@ -67,7 +67,7 @@ export default function SignUpForm() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-900 to-purple-900">
+        <div className="min-h-screen flex items-center justify-center p-4 bg-black">
             <div className="w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-700">
                 <div className="backdrop-blur-lg bg-white/10 border border-white/20 rounded-2xl p-8 shadow-2xl">
                     <div className="text-center mb-8">
