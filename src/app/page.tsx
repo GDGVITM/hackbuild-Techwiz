@@ -16,6 +16,9 @@ export default function Home() {
             <a href="/auth/register" className="bg-white text-blue-600 border border-blue-600 px-6 py-3 rounded-lg hover:bg-blue-50 transition">
               Register
             </a>
+            <a href="/dashboard/student" className="bg-white text-blue-600 border border-blue-600 px-6 py-3 rounded-lg hover:bg-blue-50 transition">
+              student dashboard
+            </a>
           </div>
         </div>
       </div>
