@@ -1,3 +1,5 @@
+"use client"
+
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -7,7 +9,7 @@ interface SignUpPageProps {
     onNavigateToLogin: () => void
 }
 
-export function SignUpPage({ onNavigateToLogin }: SignUpPageProps) {
+export default function SignUpPage({ onNavigateToLogin }: SignUpPageProps) {
     const [username, setUsername] = useState("")
     const [phoneNumber, setPhoneNumber] = useState("")
     const [email, setEmail] = useState("")

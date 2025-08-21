@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface Milestone {
   title: string;
@@ -22,6 +23,7 @@ export default function CreateJobForm({ onJobCreated }: { onJobCreated: (job: an
   ]);
   
   const [error, setError] = useState('');
+  const { token } = useAuth();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData({
@@ -54,7 +56,6 @@ export default function CreateJobForm({ onJobCreated }: { onJobCreated: (job: an
     setError('');
     
     try {
-      const token = localStorage.getItem('token');
       if (!token) {
         setError('You must be logged in to post a job');
         return;
