@@ -7,9 +7,5 @@ export const signToken = (payload: any) => {
 };
 
 export const verifyToken = (token: string) => {
-  try {
-    return jwt.verify(token, JWT_SECRET);
-  } catch (error) {
-    throw new Error('Invalid token');
-  }
+  return jwt.verify(token, JWT_SECRET);
 };
