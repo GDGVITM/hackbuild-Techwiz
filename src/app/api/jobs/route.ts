@@ -1,44 +1,49 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Job from '@/lib/models/Job';
-import { verifyToken } from '@/lib/auth/jwt';
+import dbConnect from '@/lib/db/mongoose';
 
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const skills = searchParams.get('skills');
-    const query = skills ? { 
-      $text: { $search: skills },
-      status: 'open'
-    } : { status: 'open' };
+    // Connect to the database
+    await dbConnect();
 
-    const jobs = await Job.find(query)
-      .populate('businessId', 'name email')
-      .sort({ createdAt: -1 });
+    // Find all jobs
+    const jobs = await Job.find({}).sort({ createdAt: -1 });
 
     return NextResponse.json({ jobs });
   } catch (error) {
+    console.error('Error fetching jobs:', error);
     return NextResponse.json({ error: 'Failed to fetch jobs' }, { status: 500 });
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const token = request.headers.get('Authorization')?.replace('Bearer ', '');
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    // Connect to the database
+    await dbConnect();
+
+    const { title, description, budget, deadline, skills, businessId } = await request.json();
+
+    // Validate input
+    if (!title || !description || !budget || !deadline || !businessId) {
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    const { userId } = verifyToken(token);
-    const jobData = await request.json();
-
+    // Create new job
     const job = new Job({
-      ...jobData,
-      businessId: userId,
+      title,
+      description,
+      budget,
+      deadline,
+      skills: skills || [],
+      businessId
     });
 
     await job.save();
+
     return NextResponse.json({ job }, { status: 201 });
   } catch (error) {
+    console.error('Error creating job:', error);
     return NextResponse.json({ error: 'Failed to create job' }, { status: 500 });
   }
 }
