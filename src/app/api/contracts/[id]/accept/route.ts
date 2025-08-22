@@ -1,55 +1,63 @@
+// src/app/api/contracts/[id]/accept/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getToken } from 'next-auth/jwt';
+import dbConnect from '@/lib/db/mongoose';
+import Contract from '@/lib/models/Contract';
+import jwt from 'jsonwebtoken';
 
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const token = await getToken({ req: request });
-    
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    // Verify JWT token
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Authorization token is required' }, { status: 401 });
     }
-
+    
+    const token = authHeader.substring(7);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
+    const userId = decoded.userId;
+    
     const contractId = params.id;
     
-    // Replace this with your actual database update
-    // This is a mock implementation
-    const updatedContract = {
-      _id: contractId,
-      title: 'Web Development Agreement',
-      content: `
-        <h2>Web Development Agreement</h2>
-        <p>This agreement is made between Tech Company Inc. and the developer...</p>
-        <h3>Project Scope</h3>
-        <ul>
-          <li>Design and development of a responsive website</li>
-          <li>Integration with existing systems</li>
-          <li>Testing and deployment</li>
-        </ul>
-        <h3>Payment Terms</h3>
-        <p>Total project cost: $4,000</p>
-        <p>Payment schedule as per milestones</p>
-      `,
-      createdAt: '2023-05-15',
-      status: 'signed',
-      changeRequests: [],
-      proposal: {
-        jobId: {
-          title: 'Web Development Project',
-          businessId: {
-            name: 'Tech Company Inc.',
-          },
-        },
-      },
-    };
-
-    return NextResponse.json({ contract: updatedContract });
-  } catch (error) {
+    await dbConnect();
+    
+    // Find the contract
+    const contract = await Contract.findById(contractId);
+    
+    if (!contract) {
+      return NextResponse.json({ error: 'Contract not found' }, { status: 404 });
+    }
+    
+    // Verify the student is authorized to accept this contract
+    if (contract.studentId.toString() !== userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+    }
+    
+    // Update contract status
+    contract.status = 'signed'; // or 'accepted' depending on your workflow
+    contract.updatedAt = new Date();
+    await contract.save();
+    
+    // Return updated contract
+    return NextResponse.json({ 
+      success: true, 
+      contract: {
+        ...contract.toObject(),
+        status: 'signed'
+      }
+    });
+  } catch (error: any) {
     console.error('Error accepting contract:', error);
+    
+    // Handle JWT errors
+    if (error.name === 'JsonWebTokenError') {
+      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    }
+    
     return NextResponse.json(
-      { error: 'Failed to accept contract' },
+      { error: error.message || 'Failed to accept contract' },
       { status: 500 }
     );
   }

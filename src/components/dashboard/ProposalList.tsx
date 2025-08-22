@@ -15,6 +15,12 @@ import { format } from 'date-fns';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 
+interface Contract {
+  _id: string;
+  title: string;
+  status: "draft" | "pending" | "signed" | "completed" | "changes_requested";
+}
+
 interface Proposal {
   _id: string;
   jobId: {
@@ -43,6 +49,7 @@ interface Proposal {
   quoteAmount: number;
   status: 'pending' | 'accepted' | 'rejected' | 'withdrawn';
   submittedAt: string;
+  contractId?: Contract;
 }
 
 interface ProposalListProps {
@@ -146,7 +153,9 @@ export default function ProposalList({ jobId, status }: ProposalListProps) {
         title: `${createContractFor.jobId.title} Contract`,
         description: createContractFor.jobId.description,
         milestones: jobMilestones.map(m => ({
-          ...m,
+          title: m.title,
+          description: '', // Add empty description to match Milestone interface
+          amount: m.amount,
           dueDate: new Date(m.dueDate)
         })),
         totalAmount: createContractFor.quoteAmount,
@@ -363,9 +372,9 @@ export default function ProposalList({ jobId, status }: ProposalListProps) {
     }
   };
 
-  const updateMilestone = (index: number, field: keyof Milestone, value: any) => {
+  const updateMilestone = (index: number, field: keyof Milestone, value: string | number | Date | undefined) => {
     const newMilestones = [...contractForm.milestones];
-    if (newMilestones[index]) {
+    if (newMilestones[index] && value !== undefined) {
       newMilestones[index] = { ...newMilestones[index], [field]: value };
       setContractForm({ ...contractForm, milestones: newMilestones });
     }

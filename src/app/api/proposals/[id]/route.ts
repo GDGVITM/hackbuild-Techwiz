@@ -18,7 +18,8 @@ export async function GET(
 
     const proposal = await Proposal.findById(proposalId)
       .populate('jobId', 'title description businessId')
-      .populate('studentId', 'name email');
+      .populate('studentId', 'name email')
+      .populate('contractId');
 
     if (!proposal) {
       return NextResponse.json({ error: 'Proposal not found' }, { status: 404 });

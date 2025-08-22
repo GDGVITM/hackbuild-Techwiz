@@ -1,17 +1,24 @@
+// src/app/api/contracts/[id]/request-change/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getToken } from 'next-auth/jwt';
+import dbConnect from '@/lib/db/mongoose';
+import Contract from '@/lib/models/Contract';
+import jwt from 'jsonwebtoken';
 
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const token = await getToken({ req: request });
-    
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    // Verify JWT token
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Authorization token is required' }, { status: 401 });
     }
-
+    
+    const token = authHeader.substring(7);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
+    const userId = decoded.userId;
+    
     const contractId = params.id;
     const body = await request.json();
     const { message } = body;
@@ -20,49 +27,52 @@ export async function POST(
       return NextResponse.json({ error: 'Message is required' }, { status: 400 });
     }
     
-    // Replace this with your actual database update
-    // This is a mock implementation
-    const updatedContract = {
-      _id: contractId,
-      title: 'Web Development Agreement',
-      content: `
-        <h2>Web Development Agreement</h2>
-        <p>This agreement is made between Tech Company Inc. and the developer...</p>
-        <h3>Project Scope</h3>
-        <ul>
-          <li>Design and development of a responsive website</li>
-          <li>Integration with existing systems</li>
-          <li>Testing and deployment</li>
-        </ul>
-        <h3>Payment Terms</h3>
-        <p>Total project cost: $4,000</p>
-        <p>Payment schedule as per milestones</p>
-      `,
-      createdAt: '2023-05-15',
-      status: 'changes_requested',
-      changeRequests: [
-        {
-          _id: 'cr123',
-          message: message,
-          status: 'pending',
-          createdAt: new Date().toISOString(),
-        },
-      ],
-      proposal: {
-        jobId: {
-          title: 'Web Development Project',
-          businessId: {
-            name: 'Tech Company Inc.',
-          },
-        },
-      },
+    await dbConnect();
+    
+    // Find the contract
+    const contract = await Contract.findById(contractId);
+    
+    if (!contract) {
+      return NextResponse.json({ error: 'Contract not found' }, { status: 404 });
+    }
+    
+    // Verify the student is authorized to request changes
+    if (contract.studentId.toString() !== userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+    }
+    
+    // Create change request object
+    const changeRequest = {
+      message,
+      status: 'pending',
+      createdAt: new Date(),
     };
-
-    return NextResponse.json({ contract: updatedContract });
-  } catch (error) {
+    
+    // Update contract with change request
+    contract.status = 'changes_requested';
+    contract.changeRequests = contract.changeRequests || [];
+    contract.changeRequests.push(changeRequest);
+    contract.updatedAt = new Date();
+    await contract.save();
+    
+    // Return updated contract
+    return NextResponse.json({ 
+      success: true, 
+      contract: {
+        ...contract.toObject(),
+        status: 'changes_requested'
+      }
+    });
+  } catch (error: any) {
     console.error('Error requesting changes:', error);
+    
+    // Handle JWT errors
+    if (error.name === 'JsonWebTokenError') {
+      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    }
+    
     return NextResponse.json(
-      { error: 'Failed to request changes' },
+      { error: error.message || 'Failed to request changes' },
       { status: 500 }
     );
   }

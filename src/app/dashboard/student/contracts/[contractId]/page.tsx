@@ -1,11 +1,13 @@
+// src/app/dashboard/student/contracts/[contractId]/page.tsx
 'use client';
+
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useAuth } from '@/context/AuthContext';
 
@@ -16,32 +18,29 @@ interface ChangeRequest {
   createdAt: string;
 }
 
-interface Proposal {
-  _id: string;
-  jobId: {
-    _id: string;
-    title: string;
-    businessId: {
-      _id: string;
-      name: string;
-    };
-  };
-}
-
 interface Contract {
   _id: string;
   title: string;
-  content: string;
+  description: string;
+  content?: string;
   createdAt: string;
-  status: 'draft' | 'pending' | 'signed' | 'completed' | 'changes_requested';
+  status: 'draft' | 'pending_student_review' | 'signed' | 'completed' | 'changes_requested';
   changeRequests?: ChangeRequest[];
   proposalId: string;
-  proposal?: Proposal; // This will be populated after we fetch it
+  terms: string;
+  milestones: Array<{
+    title: string;
+    description: string;
+    amount: number;
+    dueDate: string;
+  }>;
+  totalAmount: number;
+  startDate: string;
+  endDate: string;
 }
 
 export default function ContractDetailPage() {
   const [contract, setContract] = useState<Contract | null>(null);
-  const [proposal, setProposal] = useState<Proposal | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notification, setNotification] = useState<{
@@ -52,6 +51,7 @@ export default function ContractDetailPage() {
   const [showChangeRequestModal, setShowChangeRequestModal] = useState(false);
   const [changeRequestMessage, setChangeRequestMessage] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+  
   const { token } = useAuth();
   const params = useParams();
   const contractId = params.contractId as string;
@@ -100,37 +100,6 @@ export default function ContractDetailPage() {
     fetchContract();
   }, [token, contractId]);
 
-  // Fetch proposal details once we have the contract
-  useEffect(() => {
-    const fetchProposal = async () => {
-      if (!contract?.proposalId || !token) return;
-      
-      try {
-        const response = await fetch(`/api/proposals/${contract.proposalId}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-        
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to fetch proposal');
-        }
-        
-        const data = await response.json();
-        setProposal(data.proposal);
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to fetch proposal';
-        console.error(errorMessage);
-        // We don't set a notification for this error since it's not critical
-      }
-    };
-    
-    if (contract) {
-      fetchProposal();
-    }
-  }, [contract, token]);
-
   const handleAcceptContract = async () => {
     if (!contract) return;
     
@@ -154,7 +123,7 @@ export default function ContractDetailPage() {
       
       setNotification({
         title: 'Contract Accepted',
-        message: 'You have successfully accepted the contract.',
+        message: 'You have successfully accepted the contract. The business will be notified.',
         type: 'success',
       });
     } catch (err) {
@@ -175,7 +144,7 @@ export default function ContractDetailPage() {
     
     setActionLoading(true);
     try {
-      const response = await fetch(`/api/contracts/${contractId}/request-changes`, {
+      const response = await fetch(`/api/contracts/${contractId}/request-change`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -219,8 +188,8 @@ export default function ContractDetailPage() {
     switch (status) {
       case 'draft': 
         return <Badge variant="secondary">Draft</Badge>;
-      case 'pending': 
-        return <Badge variant="outline">Pending Signature</Badge>;
+      case 'pending_student_review': 
+        return <Badge variant="outline">Pending Your Review</Badge>;
       case 'signed': 
         return <Badge className="bg-green-500">Signed</Badge>;
       case 'completed': 
@@ -287,7 +256,7 @@ export default function ContractDetailPage() {
             <div>
               <CardTitle className="text-2xl">{contract.title}</CardTitle>
               <p className="text-gray-600 mt-1">
-                {proposal?.jobId?.title || 'Loading job title...'} • {proposal?.jobId?.businessId?.name || 'Loading company name...'}
+                Contract ID: {contract._id}
               </p>
             </div>
             <div className="flex gap-2 items-center">
@@ -296,8 +265,53 @@ export default function ContractDetailPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="prose max-w-none border rounded-lg p-6 bg-gray-50 my-6">
-            <div dangerouslySetInnerHTML={{ __html: contract.content }} />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div>
+              <h3 className="text-lg font-medium mb-2">Contract Details</h3>
+              <p className="text-gray-700 mb-4">{contract.description}</p>
+              
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="font-medium">Total Amount:</span>
+                  <span className="font-semibold">${contract.totalAmount.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-medium">Start Date:</span>
+                  <span>{new Date(contract.startDate).toLocaleDateString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-medium">End Date:</span>
+                  <span>{new Date(contract.endDate).toLocaleDateString()}</span>
+                </div>
+              </div>
+            </div>
+            
+            <div>
+              <h3 className="text-lg font-medium mb-2">Milestones</h3>
+              {contract.milestones && contract.milestones.length > 0 ? (
+                <div className="space-y-3">
+                  {contract.milestones.map((milestone, index) => (
+                    <div key={index} className="border rounded-lg p-3 bg-gray-50">
+                      <div className="font-medium">{milestone.title}</div>
+                      <div className="text-sm text-gray-600 mt-1">{milestone.description}</div>
+                      <div className="flex justify-between mt-2">
+                        <span className="font-semibold">${milestone.amount.toLocaleString()}</span>
+                        <span className="text-sm text-gray-500">
+                          Due: {new Date(milestone.dueDate).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-500">No milestones defined</p>
+              )}
+            </div>
+          </div>
+          
+          <div className="border rounded-lg p-6 bg-gray-50 my-6">
+            <h3 className="text-lg font-medium mb-3">Terms and Conditions</h3>
+            <div className="whitespace-pre-line">{contract.terms}</div>
           </div>
           
           {/* Change Requests Section */}
@@ -325,7 +339,7 @@ export default function ContractDetailPage() {
           </div>
           
           {/* Action Buttons */}
-          {contract.status === 'pending' && (
+          {contract.status === 'pending_student_review' && (
             <div className="flex gap-3 mt-6">
               <Button 
                 onClick={handleAcceptContract}
@@ -342,6 +356,24 @@ export default function ContractDetailPage() {
               >
                 Request Changes
               </Button>
+            </div>
+          )}
+          
+          {contract.status === 'signed' && (
+            <div className="mt-6 p-4 bg-green-50 rounded-lg border border-green-200">
+              <h3 className="font-medium text-green-800">Contract Signed</h3>
+              <p className="text-green-700 mt-1">
+                You have accepted this contract. The business will proceed with the project and payment arrangements.
+              </p>
+            </div>
+          )}
+          
+          {contract.status === 'changes_requested' && (
+            <div className="mt-6 p-4 bg-orange-50 rounded-lg border border-orange-200">
+              <h3 className="font-medium text-orange-800">Changes Requested</h3>
+              <p className="text-orange-700 mt-1">
+                Your change request has been sent to the business. They will review and respond to your requested changes.
+              </p>
             </div>
           )}
         </CardContent>
