@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import ProposalForm from '@/components/student/ProposalForm';
 import { Job } from '@/types/job';
@@ -8,12 +8,12 @@ import { useAuth } from '@/context/AuthContext';
 
 export default function JobDetailsPage() {
   const params = useParams();
-  const router = useRouter();
+  const searchParams = useSearchParams();
   const jobId = params.id as string;
+  const action = searchParams.get('action');
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showProposalForm, setShowProposalForm] = useState(false);
   const [hasApplied, setHasApplied] = useState(false);
   const [proposalStatus, setProposalStatus] = useState<string | null>(null);
   const { user, token } = useAuth();
@@ -45,7 +45,7 @@ export default function JobDetailsPage() {
           
           if (proposalsResponse.ok) {
             const proposalsData = await proposalsResponse.json();
-            const userProposal = proposalsData.proposals.find(
+            const userProposal = proposalsData.proposals?.find(
               (p: any) => p.jobId === jobId
             );
             
@@ -65,27 +65,6 @@ export default function JobDetailsPage() {
 
     fetchJobAndProposalStatus();
   }, [jobId, user, token]);
-
-  // Check if we should show the proposal form (either from URL parameter or if user hasn't applied)
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const action = urlParams.get('action');
-    
-    if (action === 'submit' && !hasApplied) {
-      setShowProposalForm(true);
-    }
-  }, [hasApplied]);
-
-  const handleSubmitProposal = () => {
-    setShowProposalForm(true);
-    // Scroll to the proposal form
-    setTimeout(() => {
-      const element = document.getElementById('proposal-form');
-      if (element) {
-        element.scrollIntoView({ behavior: 'smooth' });
-      }
-    }, 100);
-  };
 
   if (loading) return <div className="text-center py-10">Loading job details...</div>;
   if (error) return <div className="text-center py-10 text-red-600">{error}</div>;
@@ -115,7 +94,12 @@ export default function JobDetailsPage() {
           </div>
           
           {user?.role === 'student' && !hasApplied && (
-            <Button onClick={handleSubmitProposal}>
+            <Button onClick={() => {
+              const element = document.getElementById('proposal-form');
+              if (element) {
+                element.scrollIntoView({ behavior: 'smooth' });
+              }
+            }}>
               Submit Proposal
             </Button>
           )}
@@ -145,53 +129,33 @@ export default function JobDetailsPage() {
             ))}
           </ul>
         </div>
-        
-        <div className="mb-4">
-          <h2 className="text-lg font-semibold mb-2">Status</h2>
-          <span className={`px-3 py-1 rounded-full text-sm ${
-            job.status === 'open' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-          }`}>
-            {job.status === 'open' ? 'Open' : 'Closed'}
-          </span>
-        </div>
       </div>
       
+      {/* Always show the proposal form for testing */}
       {user?.role === 'student' && (
-        <div id="proposal-form">
+        <div id="proposal-form" className="bg-white rounded-lg shadow-md p-6">
+          <h2 className="text-xl font-bold mb-4">Submit Proposal</h2>
+          
           {hasApplied ? (
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-bold mb-4">Your Proposal</h2>
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-blue-800">
-                  You have already submitted a proposal for this job. 
-                  Status: <span className="font-semibold">{proposalStatus}</span>
-                </p>
-                <div className="mt-4">
-                  <a href="/dashboard/student/proposals" className="text-blue-600 hover:text-blue-800">
-                    View all your proposals
-                  </a>
-                </div>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-blue-800">
+                You have already submitted a proposal for this job. 
+                Status: <span className="font-semibold">{proposalStatus}</span>
+              </p>
+              <div className="mt-4">
+                <a href="/dashboard/student/proposals" className="text-blue-600 hover:text-blue-800">
+                  View all your proposals
+                </a>
               </div>
             </div>
           ) : (
-            showProposalForm && (
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-xl font-bold">Submit Proposal</h2>
-                  <Button variant="outline" onClick={() => setShowProposalForm(false)}>
-                    Cancel
-                  </Button>
-                </div>
-                <ProposalForm 
-                  jobId={jobId} 
-                  onProposalSubmitted={() => {
-                    setShowProposalForm(false);
-                    setHasApplied(true);
-                    setProposalStatus('pending');
-                  }} 
-                />
-              </div>
-            )
+            <ProposalForm 
+              jobId={jobId} 
+              onProposalSubmitted={() => {
+                setHasApplied(true);
+                setProposalStatus('pending');
+              }} 
+            />
           )}
         </div>
       )}

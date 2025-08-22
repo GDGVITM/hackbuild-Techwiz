@@ -3,15 +3,16 @@ import Job from '@/lib/models/Job';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }   // 👈 params is a Promise
 ) {
   try {
-    const job = await Job.findById(params.id).populate('businessId', 'name email');
+    const { id } = await context.params;         // 👈 must await
+    const job = await Job.findById(id).populate('businessId', 'name email');
     
     if (!job) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 });
     }
-    
+
     return NextResponse.json({ job });
   } catch (error) {
     console.error('Failed to fetch job:', error);
