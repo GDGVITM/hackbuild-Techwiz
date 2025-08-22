@@ -10,7 +10,9 @@ interface Milestone {
 }
 
 export default function CreateJobForm({ onJobCreated }: { onJobCreated: (job: any) => void }) {
+  const { user, token } = useAuth();
   const [formData, setFormData] = useState({
+    businessId: user ? user.id : '', // Use 'id' instead of '_id'
     title: '',
     description: '',
     skillsRequired: '',
@@ -23,7 +25,6 @@ export default function CreateJobForm({ onJobCreated }: { onJobCreated: (job: an
   ]);
   
   const [error, setError] = useState('');
-  const { token } = useAuth();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData({
@@ -92,6 +93,7 @@ export default function CreateJobForm({ onJobCreated }: { onJobCreated: (job: an
       if (response.ok) {
         onJobCreated(data.job);
         setFormData({
+          businessId: user ? user.id : '',
           title: '',
           description: '',
           skillsRequired: '',
