@@ -31,18 +31,54 @@ import {
 import { Job } from '@/types/job';
 import CreateJobForm from '@/app/dashboard/business/CreateJobForm';
 import { useAuth } from '@/context/AuthContext';
-import { useRouter } from 'next/navigation';
 
-// ... keep your existing interfaces (JobApplication, ChatMessage, ChatConversation)
+
+type ApplicationStatus = "pending" | "accepted" | "declined";
+
+interface JobApplication {
+  _id: string;
+  jobId: {
+    _id: string;
+    title: string;
+  };
+  studentId: {
+    _id: string;
+    name: string;
+    email: string;
+    avatar?: string;
+  };
+  coverLetter: string;
+  milestones: Array<{
+    title: string;
+    amount: number;
+    dueDate: string;
+  }>;
+  quoteAmount: number;
+  status: ApplicationStatus;
+  submittedAt: string;
+}
+
+interface ChatMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  message: string;
+  timestamp: string;
+  isFromBusiness: boolean;
+}
+
+interface ChatConversation {
+  applicationId: string;
+  applicantName: string;
+  messages: ChatMessage[];
+}
 
 export default function BusinessDashboard() {
-  const { user, token, isAuthenticated, logout } = useAuth();
-  const router = useRouter();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [proposals, setProposals] = useState<JobApplication[]>([]);
   const [selectedApplication, setSelectedApplication] = useState<JobApplication | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [dataLoading, setDataLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [chatConversations, setChatConversations] = useState<ChatConversation[]>([]);
   const [newMessage, setNewMessage] = useState("");
@@ -58,100 +94,246 @@ export default function BusinessDashboard() {
   const [jobPostsPage, setJobPostsPage] = useState(1);
   const applicationsPerPage = 5;
   const jobPostsPerPage = 5;
+  const { token } = useAuth();
 
-  // Redirect to login if not authenticated
   useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/login');
-    }
-  }, [isAuthenticated, router]);
-
-  // Fetch data when authenticated
-  useEffect(() => {
-    if (isAuthenticated && token) {
-      const fetchData = async () => {
-        try {
-          setDataLoading(true);
-          setError('');
-          
-          // Fetch jobs
-          const jobsResponse = await fetch('/api/jobs', {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-            },
-          });
-          
-          if (jobsResponse.ok) {
-            const jobsData = await jobsResponse.json();
-            setJobs(jobsData.jobs);
-          } else {
-            setError('Failed to fetch jobs');
-          }
-          
-          // Fetch proposals
-          const proposalsResponse = await fetch('/api/proposals', {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-            },
-          });
-          
-          if (proposalsResponse.ok) {
-            const proposalsData = await proposalsResponse.json();
-            setProposals(proposalsData.proposals);
-          } else {
-            setError('Failed to fetch proposals');
-          }
-        } catch (err) {
-          console.error('Error fetching data:', err);
-          setError('An error occurred. Please try again.');
-        } finally {
-          setDataLoading(false);
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        
+        // Fetch jobs
+        const jobsResponse = await fetch('/api/jobs', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+        
+        if (jobsResponse.ok) {
+          const jobsData = await jobsResponse.json();
+          setJobs(jobsData.jobs);
+        } else {
+          setError('Failed to fetch jobs');
         }
-      };
-      
-      fetchData();
+        
+        // Fetch proposals
+        const proposalsResponse = await fetch('/api/proposals', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+        
+        if (proposalsResponse.ok) {
+          const proposalsData = await proposalsResponse.json();
+          setProposals(proposalsData.proposals);
+        } else {
+          setError('Failed to fetch proposals');
+        }
+      } catch (err) {
+        setError('An error occurred. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [token]);
+
+  const handleJobCreated = (newJob: Job) => {
+    setJobs([newJob, ...jobs]);
+    setShowCreateForm(false);
+  };
+
+  const handleStatusChange = async (proposalId: string, newStatus: ApplicationStatus) => {
+    try {
+      const response = await fetch(`/api/proposals/${proposalId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (response.ok) {
+        setProposals((prev) => 
+          prev.map((proposal) => 
+            proposal._id === proposalId ? { ...proposal, status: newStatus } : proposal
+          )
+        );
+      }
+    } catch (error) {
+      console.error('Failed to update proposal status:', error);
     }
-  }, [isAuthenticated, token]);
+  };
 
-  // ... keep your existing functions (handleJobCreated, handleStatusChange, etc.)
+  const getStatusBadge = (status: ApplicationStatus) => {
+    switch (status) {
+      case "accepted":
+        return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Accepted</Badge>;
+      case "declined":
+        return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">Declined</Badge>;
+      case "pending":
+        return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Pending</Badge>;
+      default:
+        return <Badge variant="secondary">Unknown</Badge>;
+    }
+  };
 
-  // Show loading state while checking authentication
-  if (!isAuthenticated) {
+  const getStatusCounts = () => {
+    return proposals.reduce(
+      (acc, proposal) => {
+        acc[proposal.status] = (acc[proposal.status] || 0) + 1;
+        return acc;
+      },
+      {} as Record<ApplicationStatus, number>,
+    );
+  };
+
+  const statusCounts = getStatusCounts();
+
+  const handleCreateJobPost = async () => {
+    try {
+      const jobData = {
+        title: newJobPost.title,
+        description: newJobPost.description,
+        skillsRequired: newJobPost.skillsRequired.split(",").map((skill) => skill.trim()),
+        budgetMin: Number(newJobPost.budgetMin),
+        budgetMax: Number(newJobPost.budgetMax),
+        milestones: [],
+      };
+
+      const response = await fetch('/api/jobs', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(jobData),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setJobs([data.job, ...jobs]);
+        setNewJobPost({
+          title: "",
+          description: "",
+          skillsRequired: "",
+          budgetMin: "",
+          budgetMax: "",
+        });
+        setShowCreateForm(false);
+      }
+    } catch (error) {
+      console.error('Failed to create job:', error);
+    }
+  };
+
+  const handleSendMessage = (applicationId: string) => {
+    if (!newMessage.trim()) return;
+    
+    const message: ChatMessage = {
+      id: Date.now().toString(),
+      senderId: "business",
+      senderName: "Business User",
+      message: newMessage,
+      timestamp: new Date().toISOString(),
+      isFromBusiness: true,
+    };
+    
+    setChatConversations((prev) => {
+      const existingConv = prev.find(conv => conv.applicationId === applicationId);
+      
+      if (existingConv) {
+        return prev.map(conv => 
+          conv.applicationId === applicationId 
+            ? { ...conv, messages: [...conv.messages, message] } 
+            : conv
+        );
+      } else {
+        return [
+          ...prev,
+          {
+            applicationId,
+            applicantName: proposals.find(p => p._id === applicationId)?.studentId.name || '',
+            messages: [message]
+          }
+        ];
+      }
+    });
+    
+    setNewMessage("");
+  };
+
+  const getAcceptedApplications = () => {
+    return proposals.filter((proposal) => proposal.status === "accepted");
+  };
+
+  const getPaginatedApplications = () => {
+    const startIndex = (applicationsPage - 1) * applicationsPerPage;
+    const endIndex = startIndex + applicationsPerPage;
+    return proposals.slice(startIndex, endIndex);
+  };
+
+  const getPaginatedJobPosts = () => {
+    const startIndex = (jobPostsPage - 1) * jobPostsPerPage;
+    const endIndex = startIndex + jobPostsPerPage;
+    return jobs.slice(startIndex, endIndex);
+  };
+
+  const getTotalApplicationsPages = () => {
+    return Math.ceil(proposals.length / applicationsPerPage);
+  };
+
+  const getTotalJobPostsPages = () => {
+    return Math.ceil(jobs.length / jobPostsPerPage);
+  };
+
+  const PaginationControls = ({
+    currentPage,
+    totalPages,
+    onPageChange,
+  }: {
+    currentPage: number;
+    totalPages: number;
+    onPageChange: (page: number) => void;
+  }) => {
+    if (totalPages <= 1) return null;
+    
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Checking authentication...</p>
+      <div className="flex items-center justify-between mt-4">
+        <div className="text-sm text-muted-foreground">
+          Page {currentPage} of {totalPages}
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onPageChange(currentPage - 1)}
+            disabled={currentPage === 1}
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Previous
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onPageChange(currentPage + 1)}
+            disabled={currentPage === totalPages}
+          >
+            Next
+            <ChevronRight className="h-4 w-4" />
+          </Button>
         </div>
       </div>
     );
+  };
+
+  if (loading) {
+    return <div className="text-center py-10">Loading dashboard...</div>;
   }
 
-  // Show loading state while fetching data
-  if (dataLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading dashboard...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Show error state if there's an error
   if (error) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center max-w-md">
-          <div className="text-red-600 mb-4">{error}</div>
-          <div className="flex justify-center space-x-4">
-            <Button onClick={() => window.location.reload()}>Retry</Button>
-            <Button variant="outline" onClick={logout}>Logout</Button>
-          </div>
-        </div>
-      </div>
-    );
+    return <div className="text-center py-10 text-red-600">{error}</div>;
   }
 
   return (
@@ -159,55 +341,30 @@ export default function BusinessDashboard() {
       <div className="flex">
         {/* Sidebar */}
         <aside className="w-64 border-r border-sidebar-border bg-sidebar p-6">
-          <div className="mb-8">
-            <h2 className="text-xl font-bold text-white mb-2">FreelanceHub</h2>
-            <p className="text-sm text-gray-300">Business Dashboard</p>
-          </div>
-          
-          <div className="mb-6 p-4 bg-white/10 rounded-lg">
-            <div className="flex items-center space-x-3">
-              <Avatar>
-                <AvatarImage src="/business-user.png" />
-                <AvatarFallback>{user?.name?.charAt(0)}</AvatarFallback>
-              </Avatar>
-              <div>
-                <p className="font-medium text-white">{user?.name}</p>
-                <p className="text-xs text-gray-300">{user?.email}</p>
-              </div>
-            </div>
-            <Button 
-              variant="ghost" 
-              className="w-full justify-start mt-3 text-gray-300 hover:text-white"
-              onClick={logout}
-            >
-              Logout
-            </Button>
-          </div>
-          
           <nav className="space-y-2">
             <Link href="/dashboard/business">
-              <Button variant="ghost" className="w-full justify-start text-gray-300 hover:text-white">
+              <Button variant="ghost" className="w-full justify-start">
                 <Building2 className="mr-2 h-4 w-4" />
                 Dashboard
               </Button>
             </Link>
             <Link href="/dashboard/business/proposals">
-              <Button variant="ghost" className="w-full justify-start text-gray-300 hover:text-white">
+              <Button variant="ghost" className="w-full justify-start">
                 <Users className="mr-2 h-4 w-4" />
                 Proposals
               </Button>
             </Link>
             <Link href="/dashboard/business/jobs">
-              <Button variant="ghost" className="w-full justify-start text-gray-300 hover:text-white">
+              <Button variant="ghost" className="w-full justify-start">
                 <Building2 className="mr-2 h-4 w-4" />
                 Job Posts
               </Button>
             </Link>
-            <Button variant="ghost" className="w-full justify-start text-gray-300 hover:text-white">
+            <Button variant="ghost" className="w-full justify-start">
               <MessageCircle className="mr-2 h-4 w-4" />
               Chat
             </Button>
-            <Button variant="ghost" className="w-full justify-start text-gray-300 hover:text-white">
+            <Button variant="ghost" className="w-full justify-start">
               <Clock className="mr-2 h-4 w-4" />
               Analytics
             </Button>
@@ -237,7 +394,7 @@ export default function BusinessDashboard() {
                     <Clock className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">{proposals.filter(p => p.status === 'pending').length}</div>
+                    <div className="text-2xl font-bold">{statusCounts.pending || 0}</div>
                   </CardContent>
                 </Card>
                 <Card>
@@ -246,7 +403,7 @@ export default function BusinessDashboard() {
                     <CheckCircle className="h-4 w-4 text-green-600" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">{proposals.filter(p => p.status === 'accepted').length}</div>
+                    <div className="text-2xl font-bold">{statusCounts.accepted || 0}</div>
                   </CardContent>
                 </Card>
                 <Card>
@@ -255,7 +412,7 @@ export default function BusinessDashboard() {
                     <XCircle className="h-4 w-4 text-red-600" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">{proposals.filter(p => p.status === 'declined').length}</div>
+                    <div className="text-2xl font-bold">{statusCounts.declined || 0}</div>
                   </CardContent>
                 </Card>
               </div>
@@ -278,7 +435,7 @@ export default function BusinessDashboard() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {proposals.slice(0, 5).map((proposal) => (
+                      {getPaginatedApplications().map((proposal) => (
                         <TableRow key={proposal._id}>
                           <TableCell>
                             <div className="flex items-center gap-3">
@@ -378,6 +535,11 @@ export default function BusinessDashboard() {
                       ))}
                     </TableBody>
                   </Table>
+                  <PaginationControls
+                    currentPage={applicationsPage}
+                    totalPages={getTotalApplicationsPages()}
+                    onPageChange={setApplicationsPage}
+                  />
                 </CardContent>
               </Card>
             </TabsContent>
@@ -406,7 +568,7 @@ export default function BusinessDashboard() {
               )}
               
               <div className="grid gap-4">
-                {jobs.map((job) => (
+                {getPaginatedJobPosts().map((job) => (
                   <Card key={job._id}>
                     <CardHeader>
                       <div className="flex items-start justify-between">
@@ -437,6 +599,12 @@ export default function BusinessDashboard() {
                   </Card>
                 ))}
               </div>
+              
+              <PaginationControls
+                currentPage={jobPostsPage}
+                totalPages={getTotalJobPostsPages()}
+                onPageChange={setJobPostsPage}
+              />
             </TabsContent>
             
             <TabsContent value="chat" className="space-y-6">
@@ -453,7 +621,7 @@ export default function BusinessDashboard() {
                   </CardHeader>
                   <CardContent className="p-0">
                     <div className="space-y-1">
-                      {proposals.filter(p => p.status === 'accepted').map((app) => (
+                      {getAcceptedApplications().map((app) => (
                         <div
                           key={app._id}
                           className={`p-3 cursor-pointer hover:bg-muted/50 border-b ${
