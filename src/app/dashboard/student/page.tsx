@@ -1,7 +1,7 @@
 "use client"
 
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
-import StudentDashboard from "@/components/student/student-dashboard"
+import StudentDashboard from "@/components/dashboard/student-dashboard"
 
 export default function Home() {
     return (

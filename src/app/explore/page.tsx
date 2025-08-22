@@ -1,81 +1,70 @@
 "use client"
-
 import { JobList } from "@/components/jobs/job-list"
+import { useEffect, useState } from "react"
 
-// Mock data for demonstration
-const mockJobs = [
-  {
-    _id: "1",
-    businessId: "business1",
-    title: "Full-Stack Developer for E-commerce Platform",
-    description:
-      "We're looking for an experienced full-stack developer to build a modern e-commerce platform with React, Node.js, and MongoDB. The project includes user authentication, payment processing, and admin dashboard.",
-    skillsRequired: ["React", "Node.js", "MongoDB", "TypeScript", "Stripe", "AWS"],
-    budgetMin: 5000,
-    budgetMax: 8000,
-    milestones: [
-      {
-        title: "Frontend Setup & Authentication",
-        amount: 2000,
-        dueDate: new Date("2024-02-15"),
-      },
-      {
-        title: "Backend API & Database",
-        amount: 2500,
-        dueDate: new Date("2024-03-01"),
-      },
-      {
-        title: "Payment Integration & Testing",
-        amount: 1500,
-        dueDate: new Date("2024-03-15"),
-      },
-    ],
-    status: "open" as const,
-    createdAt: new Date("2024-01-15"),
-    updatedAt: new Date("2024-01-15"),
-  },
-  {
-    _id: "2",
-    businessId: "business2",
-    title: "Mobile App UI/UX Design",
-    description:
-      "Design a clean and modern mobile app interface for a fitness tracking application. Need wireframes, mockups, and a complete design system.",
-    skillsRequired: ["Figma", "UI/UX Design", "Mobile Design", "Prototyping"],
-    budgetMin: 2000,
-    budgetMax: 3500,
-    milestones: [
-      {
-        title: "Wireframes & User Flow",
-        amount: 1000,
-        dueDate: new Date("2024-02-10"),
-      },
-      {
-        title: "High-Fidelity Mockups",
-        amount: 1500,
-        dueDate: new Date("2024-02-25"),
-      },
-    ],
-    status: "open" as const,
-    createdAt: new Date("2024-01-20"),
-    updatedAt: new Date("2024-01-20"),
-  },
-  {
-    _id: "3",
-    businessId: "business3",
-    title: "WordPress Website Migration",
-    description:
-      "Migrate existing WordPress site to a new hosting provider and optimize for performance. Includes SSL setup and backup configuration.",
-    skillsRequired: ["WordPress", "PHP", "MySQL", "cPanel", "SSL"],
-    budgetMin: 800,
-    budgetMax: 1200,
-    milestones: [],
-    status: "closed" as const,
-    createdAt: new Date("2024-01-10"),
-    updatedAt: new Date("2024-01-25"),
-  },
-]
+// Define the Job interface in this file or import it from a shared types file
+interface Job {
+  _id: string
+  businessId: string
+  title: string
+  description: string
+  skillsRequired: string[]
+  budgetMin: number
+  budgetMax: number
+  milestones: Array<{
+    title: string
+    amount: number
+    dueDate: Date
+  }>
+  status: "open" | "closed"
+  createdAt: Date
+  updatedAt: Date
+}
 
 export default function HomePage() {
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const fetchJobs = async () => {
+      try {
+        const response = await fetch('/api/jobs', {
+          credentials: 'include'
+        });
+        const data = await response.json();
+        
+        if (response.ok) {
+          // Transform the data to match the Job interface if needed
+          const transformedJobs = data.jobs.map((job: any) => ({
+            ...job,
+            budgetMin: job.budgetMin || job.budget,
+            budgetMax: job.budgetMax || job.budget,
+            skillsRequired: job.skillsRequired || job.skills || [],
+            milestones: job.milestones || [],
+            status: job.status || "open",
+            createdAt: new Date(job.createdAt),
+            updatedAt: new Date(job.updatedAt)
+          }));
+          setJobs(transformedJobs);
+        } else if (response.status === 401) {
+          setError('Authentication required. Please log in again.');
+        } else if (response.status === 403) {
+          setError('You do not have permission to view jobs.');
+        } else {
+          setError(data.error || 'Failed to fetch jobs');
+        }
+      } catch (err) {
+        console.error('Fetch error:', err);
+        setError('An error occurred. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchJobs();
+  }, []);
+
   const handleApply = (jobId: string) => {
     console.log("Apply to job:", jobId)
     // Handle job application logic
@@ -86,14 +75,48 @@ export default function HomePage() {
     // Handle view details logic
   }
 
+  if (loading) {
+    return <div className="text-center py-10">Loading jobs...</div>;
+  }
+
+  if (error) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="text-center py-10 text-red-600">
+          <p>{error}</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (jobs.length === 0) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="text-center py-10">
+          <p className="text-lg">No jobs available at the moment.</p>
+          <p className="text-muted-foreground mt-2">Check back later for new opportunities</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">Available Jobs</h1>
         <p className="text-muted-foreground">Find your next freelance opportunity</p>
       </div>
-
-      <JobList jobs={mockJobs} onApply={handleApply} onViewDetails={handleViewDetails} />
+      <JobList
+        jobs={jobs}
+        onApply={handleApply}
+        onViewDetails={handleViewDetails}
+      />
     </div>
   )
 }
