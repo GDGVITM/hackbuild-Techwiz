@@ -20,6 +20,7 @@ export default function LoginForm() {
     setLoading(true);
 
     try {
+      console.log('LoginForm - Attempting login for email:', email);
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -28,22 +29,28 @@ export default function LoginForm() {
       });
 
       const data = await response.json();
+      console.log('LoginForm - Login response:', { status: response.status, data });
 
       if (response.ok && data.success) {
+        console.log('LoginForm - Login successful, user role:', data.user.role);
         // The cookies are automatically set by the server
         // We just need to update the client-side state
         login(data.user.token || '', data.user);
-        
+
         // Redirect based on user role
         if (data.user.role === 'student') {
+          console.log('LoginForm - Redirecting to student dashboard');
           router.push('/dashboard/student');
         } else if (data.user.role === 'business') {
+          console.log('LoginForm - Redirecting to business dashboard');
           router.push('/dashboard/business');
         }
       } else {
+        console.log('LoginForm - Login failed:', data.error);
         setError(data.error || 'Login failed');
       }
     } catch (err) {
+      console.error('LoginForm - Login error:', err);
       setError('An error occurred. Please try again.');
     } finally {
       setLoading(false);

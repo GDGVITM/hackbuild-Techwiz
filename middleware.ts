@@ -65,17 +65,29 @@ export async function middleware(request: NextRequest) {
       throw new Error("Token expired");
     }
 
-    // Check role-based access for specific routes
+    // Check role-based access for the specific route being accessed
+    let hasAccess = true;
+    let requiredRoles: string[] = [];
+    
     for (const [route, allowedRoles] of Object.entries(ROLE_BASED_ROUTES)) {
-      if (pathname.startsWith(route) && !allowedRoles.includes(payload.role)) {
-        if (pathname.startsWith("/api/")) {
-          return NextResponse.json(
-            { error: "Insufficient permissions" },
-            { status: 403 }
-          );
-        }
-        return NextResponse.redirect(new URL("/dashboard", request.url));
+      if (pathname.startsWith(route)) {
+        requiredRoles = allowedRoles;
+        hasAccess = allowedRoles.includes(payload.role);
+        break; // Found the matching route, no need to check others
       }
+    }
+
+    // If route requires specific roles and user doesn't have access
+    if (requiredRoles.length > 0 && !hasAccess) {
+      if (pathname.startsWith("/api/")) {
+        return NextResponse.json(
+          { error: "Insufficient permissions" },
+          { status: 403 }
+        );
+      }
+      // Redirect to appropriate dashboard based on user role
+      const dashboardPath = payload.role === 'business' ? '/dashboard/business' : '/dashboard/student';
+      return NextResponse.redirect(new URL(dashboardPath, request.url));
     }
 
     // Add user info to headers for API routes
@@ -91,6 +103,7 @@ export async function middleware(request: NextRequest) {
       });
     }
 
+    // For page routes, just allow access if authentication passed
     return NextResponse.next();
   } catch (error) {
     console.error("JWT verification failed:", error);

@@ -1,13 +1,33 @@
-"use client"
+"use client";
+import { Proposal } from "@/lib/models/Proposal";
+import { useEffect, useState } from "react";
+import { useAuth } from "@/context/AuthContext";
+import { Job } from "@/types/job";
+// Import at the top
+import { useRouter } from "next/navigation";
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import { Label } from "@/components/ui/label"
+// import { Proposall } from "@/types/proposal";
+import Link from "next/link";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -15,10 +35,11 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Separator } from "@/components/ui/separator"
+} from "@/components/ui/dialog";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import JobDetailsPage from "../../app/dashboard/student/jobs/[id]/page";
 import {
   Search,
   MapPin,
@@ -31,292 +52,314 @@ import {
   Clock3,
   MessageCircle,
   Briefcase,
-  GraduationCap,
-} from "lucide-react"
+  User,
+} from "lucide-react";
 
-// Mock data for available jobs
-const mockJobs = [
-  {
-    id: 1,
-    title: "Frontend Developer Intern",
-    company: "TechCorp Solutions",
-    location: "San Francisco, CA",
-    type: "Internship",
-    salary: "$25/hour",
-    description:
-      "Join our dynamic team as a Frontend Developer Intern. Work on cutting-edge web applications using React, TypeScript, and modern development tools.",
-    requirements: ["React", "JavaScript", "HTML/CSS", "Git"],
-    postedDate: "2024-01-15",
-    companyLogo: "/business-user.png",
-  },
-  {
-    id: 2,
-    title: "UX/UI Design Intern",
-    company: "Creative Studios",
-    location: "New York, NY",
-    type: "Internship",
-    salary: "$22/hour",
-    description:
-      "Design beautiful and intuitive user interfaces for mobile and web applications. Collaborate with product teams to create exceptional user experiences.",
-    requirements: ["Figma", "Adobe Creative Suite", "User Research", "Prototyping"],
-    postedDate: "2024-01-14",
-    companyLogo: "/business-user.png",
-  },
-  {
-    id: 3,
-    title: "Data Science Intern",
-    company: "Analytics Pro",
-    location: "Boston, MA",
-    type: "Internship",
-    salary: "$28/hour",
-    description:
-      "Work with large datasets to extract meaningful insights. Build machine learning models and create data visualizations for business stakeholders.",
-    requirements: ["Python", "SQL", "Machine Learning", "Statistics"],
-    postedDate: "2024-01-13",
-    companyLogo: "/business-user.png",
-  },
-  {
-    id: 4,
-    title: "Marketing Intern",
-    company: "Brand Builders",
-    location: "Los Angeles, CA",
-    type: "Internship",
-    salary: "$20/hour",
-    description:
-      "Support marketing campaigns across digital channels. Create content, analyze performance metrics, and assist with social media management.",
-    requirements: ["Social Media", "Content Creation", "Analytics", "Communication"],
-    postedDate: "2024-01-12",
-    companyLogo: "/business-user.png",
-  },
-  {
-    id: 5,
-    title: "Software Engineering Intern",
-    company: "DevTech Inc",
-    location: "Seattle, WA",
-    type: "Internship",
-    salary: "$30/hour",
-    description:
-      "Develop scalable backend services and APIs. Work with cloud technologies and contribute to our microservices architecture.",
-    requirements: ["Java", "Spring Boot", "AWS", "Docker"],
-    postedDate: "2024-01-11",
-    companyLogo: "/business-user.png",
-  },
-  {
-    id: 6,
-    title: "Product Management Intern",
-    company: "Innovation Labs",
-    location: "Austin, TX",
-    type: "Internship",
-    salary: "$26/hour",
-    description:
-      "Support product development lifecycle from ideation to launch. Conduct market research and work closely with engineering teams.",
-    requirements: ["Product Strategy", "Market Research", "Agile", "Communication"],
-    postedDate: "2024-01-10",
-    companyLogo: "/business-user.png",
-  },
-  {
-    id: 7,
-    title: "Cybersecurity Intern",
-    company: "SecureNet",
-    location: "Washington, DC",
-    type: "Internship",
-    salary: "$27/hour",
-    description:
-      "Learn about cybersecurity best practices and help implement security measures. Assist with vulnerability assessments and security audits.",
-    requirements: ["Network Security", "Ethical Hacking", "Risk Assessment", "Compliance"],
-    postedDate: "2024-01-09",
-    companyLogo: "/business-user.png",
-  },
-  {
-    id: 8,
-    title: "Mobile App Developer Intern",
-    company: "AppCraft",
-    location: "Miami, FL",
-    type: "Internship",
-    salary: "$24/hour",
-    description:
-      "Develop mobile applications for iOS and Android platforms. Work with cross-platform frameworks and native development tools.",
-    requirements: ["React Native", "Swift", "Kotlin", "Mobile UI/UX"],
-    postedDate: "2024-01-08",
-    companyLogo: "/business-user.png",
-  },
-]
-
-// Mock data for student applications
-const mockApplications = [
-  {
-    id: 1,
-    jobTitle: "Frontend Developer Intern",
-    company: "TechCorp Solutions",
-    status: "accepted",
-    appliedDate: "2024-01-16",
-    proposal: "I'm excited to apply for this position...",
-  },
-  {
-    id: 2,
-    jobTitle: "UX/UI Design Intern",
-    company: "Creative Studios",
-    status: "pending",
-    appliedDate: "2024-01-15",
-    proposal: "As a design student with experience in Figma...",
-  },
-  {
-    id: 3,
-    jobTitle: "Data Science Intern",
-    company: "Analytics Pro",
-    status: "declined",
-    appliedDate: "2024-01-14",
-    proposal: "My background in statistics and Python...",
-  },
-  {
-    id: 4,
-    jobTitle: "Marketing Intern",
-    company: "Brand Builders",
-    status: "accepted",
-    appliedDate: "2024-01-13",
-    proposal: "I have experience managing social media accounts...",
-  },
-  {
-    id: 5,
-    jobTitle: "Software Engineering Intern",
-    company: "DevTech Inc",
-    status: "pending",
-    appliedDate: "2024-01-12",
-    proposal: "I'm proficient in Java and have worked with Spring Boot...",
-  },
-  {
-    id: 6,
-    jobTitle: "Product Management Intern",
-    company: "Innovation Labs",
-    status: "pending",
-    appliedDate: "2024-01-11",
-    proposal: "My coursework in business strategy aligns well...",
-  },
-]
-
-// Mock chat conversations for accepted applications
-const mockChatConversations = [
-  {
-    id: 1,
-    company: "TechCorp Solutions",
-    jobTitle: "Frontend Developer Intern",
-    lastMessage: "Great! When can you start?",
-    timestamp: "2024-01-17T10:30:00Z",
-    unread: 2,
-    messages: [
-      {
-        id: 1,
-        sender: "business",
-        content: "Hi! We're excited to move forward with your application.",
-        timestamp: "2024-01-17T09:00:00Z",
-      },
-      {
-        id: 2,
-        sender: "student",
-        content: "Thank you! I'm very excited about this opportunity.",
-        timestamp: "2024-01-17T09:15:00Z",
-      },
-      { id: 3, sender: "business", content: "Great! When can you start?", timestamp: "2024-01-17T10:30:00Z" },
-    ],
-  },
-  {
-    id: 2,
-    company: "Brand Builders",
-    jobTitle: "Marketing Intern",
-    lastMessage: "Looking forward to working with you!",
-    timestamp: "2024-01-16T14:20:00Z",
-    unread: 0,
-    messages: [
-      {
-        id: 1,
-        sender: "business",
-        content: "Congratulations! We'd like to offer you the position.",
-        timestamp: "2024-01-16T13:00:00Z",
-      },
-      {
-        id: 2,
-        sender: "student",
-        content: "Thank you so much! I accept the offer.",
-        timestamp: "2024-01-16T13:30:00Z",
-      },
-      { id: 3, sender: "business", content: "Looking forward to working with you!", timestamp: "2024-01-16T14:20:00Z" },
-    ],
-  },
-]
+interface ChatConversation {
+  id: string;
+  company: string;
+  jobTitle: string;
+  lastMessage: string;
+  timestamp: string;
+  unread: number;
+  messages: Array<{
+    id: string;
+    sender: string;
+    content: string;
+    timestamp: string;
+  }>;
+}
 
 export default function StudentDashboard() {
-  const [activeTab, setActiveTab] = useState("explore")
-  const [searchTerm, setSearchTerm] = useState("")
-  const [selectedJob, setSelectedJob] = useState<any>(null)
+  const router = useRouter();
+  const { user, isAuthenticated, loading: authLoading } = useAuth();
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [chats, setChats] = useState<ChatConversation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  // UI State
+  const [activeTab, setActiveTab] = useState("explore");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [applicationForm, setApplicationForm] = useState({
     coverLetter: "",
     portfolio: "",
     availability: "",
-  })
+  });
+  const [jobsCurrentPage, setJobsCurrentPage] = useState(1);
+  const [applicationsCurrentPage, setApplicationsCurrentPage] = useState(1);
+  const [selectedChat, setSelectedChat] = useState<ChatConversation | null>(
+    null
+  );
+  const [newMessage, setNewMessage] = useState("");
 
-  // Pagination states
-  const [jobsCurrentPage, setJobsCurrentPage] = useState(1)
-  const [applicationsCurrentPage, setApplicationsCurrentPage] = useState(1)
-  const jobsPerPage = 5
-  const applicationsPerPage = 5
+  // Filter states
+  const [skillFilter, setSkillFilter] = useState<string>("all");
+  const [budgetFilter, setBudgetFilter] = useState<string>("all");
 
-  // Chat states
-  const [selectedChat, setSelectedChat] = useState<any>(null)
-  const [newMessage, setNewMessage] = useState("")
+  const jobsPerPage = 5;
+  const applicationsPerPage = 5;
 
-  // Filter jobs based on search term
-  const filteredJobs = mockJobs.filter(
-    (job) =>
+  // Check authentication and fetch data
+  useEffect(() => {
+    if (!authLoading) {
+      if (!isAuthenticated) {
+        router.push('/auth/login');
+        return;
+      }
+      
+      if (user && user.role !== 'student') {
+        router.push('/unauthorized');
+        return;
+      }
+    }
+  }, [isAuthenticated, authLoading, user, router]);
+
+  // Fetch jobs
+  useEffect(() => {
+    const fetchJobs = async () => {
+      try {
+        const response = await fetch("/api/jobs");
+        const data = await response.json();
+
+        if (response.ok) {
+          setJobs(data.jobs);
+        } else {
+          setError(data.error || "Failed to fetch jobs");
+        }
+      } catch (err) {
+        setError("An error occurred. Please try again.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchJobs();
+  }, []);
+
+  // Fetch proposals
+  useEffect(() => {
+    const fetchProposals = async () => {
+      if (!isAuthenticated || !user) return;
+
+      try {
+        const response = await fetch("/api/proposals", {
+          credentials: "include",
+        });
+        const data = await response.json();
+
+        if (response.ok) {
+          setProposals(data.proposals);
+        }
+      } catch (err) {
+        console.error("Failed to fetch proposals:", err);
+      }
+    };
+    fetchProposals();
+  }, [isAuthenticated, user]);
+
+  // Fetch chats
+  useEffect(() => {
+    const fetchChats = async () => {
+      if (!isAuthenticated || !user) return;
+
+      try {
+        const response = await fetch("/api/chats", {
+          credentials: "include",
+        });
+        const data = await response.json();
+
+        if (response.ok) {
+          setChats(data.chats);
+        }
+      } catch (err) {
+        console.error("Failed to fetch chats:", err);
+      }
+    };
+    fetchChats();
+  }, [isAuthenticated, user]);
+
+  // Filter and search jobs
+  const filteredJobs = jobs.filter((job) => {
+    // Filter by search term
+    const matchesSearch =
+      searchTerm === "" ||
       job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      job.company.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      job.location.toLowerCase().includes(searchTerm.toLowerCase()),
-  )
+      job.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      job.skillsRequired.some((skill) =>
+        skill.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+
+    // Filter by skill
+    const matchesSkill =
+      skillFilter === "all" || job.skillsRequired.includes(skillFilter);
+
+    // Filter by budget
+    let matchesBudget = true;
+    if (budgetFilter !== "all") {
+      const [min, max] = budgetFilter.split("-").map(Number);
+      const avgBudget = (job.budgetMin + job.budgetMax) / 2;
+      matchesBudget = avgBudget >= min && avgBudget <= max;
+    }
+
+    return matchesSearch && matchesSkill && matchesBudget;
+  });
 
   // Pagination logic for jobs
-  const totalJobsPages = Math.ceil(filteredJobs.length / jobsPerPage)
-  const jobsStartIndex = (jobsCurrentPage - 1) * jobsPerPage
-  const jobsEndIndex = jobsStartIndex + jobsPerPage
-  const currentJobs = filteredJobs.slice(jobsStartIndex, jobsEndIndex)
+  const totalJobsPages = Math.ceil(filteredJobs.length / jobsPerPage);
+  const jobsStartIndex = (jobsCurrentPage - 1) * jobsPerPage;
+  const jobsEndIndex = jobsStartIndex + jobsPerPage;
+  const currentJobs = filteredJobs.slice(jobsStartIndex, jobsEndIndex);
 
   // Pagination logic for applications
-  const totalApplicationsPages = Math.ceil(mockApplications.length / applicationsPerPage)
-  const applicationsStartIndex = (applicationsCurrentPage - 1) * applicationsPerPage
-  const applicationsEndIndex = applicationsStartIndex + applicationsPerPage
-  const currentApplications = mockApplications.slice(applicationsStartIndex, applicationsEndIndex)
+  const totalApplicationsPages = Math.ceil(
+    proposals.length / applicationsPerPage
+  );
+  const applicationsStartIndex =
+    (applicationsCurrentPage - 1) * applicationsPerPage;
+  const applicationsEndIndex = applicationsStartIndex + applicationsPerPage;
+  const currentApplications = proposals.slice(
+    applicationsStartIndex,
+    applicationsEndIndex
+  );
 
-  const handleJobsPageChange = (page: number) => {
-    setJobsCurrentPage(page)
-  }
+  // Get unique skills from all jobs
+  const getAllSkills = () => {
+    const skills = new Set<string>();
+    jobs.forEach((job) => {
+      job.skillsRequired.forEach((skill) => skills.add(skill));
+    });
+    return Array.from(skills).sort();
+  };
 
-  const handleApplicationsPageChange = (page: number) => {
-    setApplicationsCurrentPage(page)
-  }
+  // Get job details for proposals
+  const getJobDetails = (jobId: string) => {
+    return jobs.find((job) => job._id === jobId);
+  };
 
-  const handleApplyToJob = (job: any) => {
-    setSelectedJob(job)
-    setApplicationForm({ coverLetter: "", portfolio: "", availability: "" })
-  }
+  // Create a set of job IDs that the student has already applied to
+  const appliedJobIds = new Set(proposals.map((p) => p.jobId));
 
-  const handleSubmitApplication = () => {
-    // Here you would typically submit to your backend
-    console.log("Submitting application:", { job: selectedJob, form: applicationForm })
-    setSelectedJob(null)
-    setApplicationForm({ coverLetter: "", portfolio: "", availability: "" })
-  }
+  // Get the status of a proposal for a specific job
+  const getProposalStatus = (jobId: string) => {
+    const proposal = proposals.find((p) => p.jobId === jobId);
+    return proposal ? proposal.status : null;
+  };
 
-  const handleSendMessage = () => {
-    if (newMessage.trim() && selectedChat) {
-      const message = {
-        id: selectedChat.messages.length + 1,
-        sender: "student",
-        content: newMessage,
-        timestamp: new Date().toISOString(),
+  // // Handle job application
+  // const handleApplyToJob = (job: Job) => {
+  //   setSelectedJob(job);
+  //   setApplicationForm({ coverLetter: "", portfolio: "", availability: "" });
+  // };
+  // Replace the handleApplyToJob function
+  const handleApplyToJob = (job: Job) => {
+    router.push(`/dashboard/student/jobs/${job._id}?action=submit`);
+  };
+
+  // Submit application
+  const handleSubmitApplication = async () => {
+    if (!selectedJob || !token) return;
+
+    try {
+      const response = await fetch("/api/proposals", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          jobId: selectedJob._id,
+          coverLetter: applicationForm.coverLetter,
+          portfolio: applicationForm.portfolio,
+          availability: applicationForm.availability,
+        }),
+      });
+
+      if (response.ok) {
+        // Refresh proposals
+        const proposalsResponse = await fetch("/api/proposals", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        const proposalsData = await proposalsResponse.json();
+        if (proposalsResponse.ok) {
+          setProposals(proposalsData.proposals);
+        }
+        setSelectedJob(null);
+        setApplicationForm({
+          coverLetter: "",
+          portfolio: "",
+          availability: "",
+        });
+      } else {
+        const errorData = await response.json();
+        setError(errorData.error || "Failed to submit application");
       }
-      selectedChat.messages.push(message)
-      setNewMessage("")
+    } catch (err) {
+      setError("An error occurred. Please try again.");
     }
-  }
+  };
 
+  // Send message
+  const handleSendMessage = async () => {
+    if (!newMessage.trim() || !selectedChat || !token) return;
+
+    try {
+      const response = await fetch(`/api/chats/${selectedChat.id}/messages`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          content: newMessage,
+        }),
+      });
+
+      if (response.ok) {
+        // Update the selectedChat with the new message
+        const updatedMessages = [
+          ...selectedChat.messages,
+          {
+            id: selectedChat.messages.length + 1,
+            sender: "student",
+            content: newMessage,
+            timestamp: new Date().toISOString(),
+          },
+        ];
+        setSelectedChat({
+          ...selectedChat,
+          messages: updatedMessages,
+          lastMessage: newMessage,
+          timestamp: new Date().toISOString(),
+        });
+
+        // Update the chat in the chats list
+        setChats(
+          chats.map((chat) =>
+            chat.id === selectedChat.id
+              ? {
+                  ...chat,
+                  lastMessage: newMessage,
+                  timestamp: new Date().toISOString(),
+                }
+              : chat
+          )
+        );
+
+        setNewMessage("");
+      } else {
+        const errorData = await response.json();
+        setError(errorData.error || "Failed to send message");
+      }
+    } catch (err) {
+      setError("An error occurred. Please try again.");
+    }
+  };
+
+  // Status badge component
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "accepted":
@@ -325,61 +368,85 @@ export default function StudentDashboard() {
             <CheckCircle className="w-3 h-3 mr-1" />
             Accepted
           </Badge>
-        )
-      case "declined":
+        );
+      case "rejected":
         return (
           <Badge className="bg-red-100 text-red-700 border-red-200">
             <XCircle className="w-3 h-3 mr-1" />
-            Declined
+            Rejected
           </Badge>
-        )
+        );
       case "pending":
         return (
           <Badge className="bg-amber-100 text-amber-700 border-amber-200">
             <Clock3 className="w-3 h-3 mr-1" />
             Pending
           </Badge>
-        )
+        );
       default:
-        return <Badge variant="secondary">{status}</Badge>
+        return <Badge variant="secondary">{status}</Badge>;
     }
+  };
+
+  const allSkills = getAllSkills();
+
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-gray-900"></div>
+      </div>
+    );
   }
 
-  const acceptedConversations = mockChatConversations
+  if (!isAuthenticated || !user) {
+    return null;
+  }
+
+  if (loading) {
+    return (
+      <div className="text-center py-10">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+        <p className="mt-2 text-gray-600">Loading dashboard...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-10">
+        <div className="text-red-600 mb-4">⚠️</div>
+        <p className="text-red-600">{error}</p>
+        <Button
+          onClick={() => window.location.reload()}
+          className="mt-4"
+          variant="outline"
+        >
+          Try Again
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      {/* <header className="bg-white border-b border-slate-200 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <GraduationCap className="w-8 h-8 text-indigo-600" />
-              <h1 className="text-2xl font-bold text-slate-900 font-sans">Student Portal</h1>
-            </div>
-          </div>
-          <div className="flex items-center space-x-4">
-            <Avatar>
-              <AvatarImage src="/professional-woman-diverse.png" alt="Student" />
-              <AvatarFallback>ST</AvatarFallback>
-            </Avatar>
-            <div>
-              <p className="text-sm font-medium text-slate-900">Sarah Johnson</p>
-              <p className="text-xs text-slate-500">Computer Science Student</p>
-            </div>
-          </div>
-        </div>
-      </header> */}
-
-      {/* Main Content */}
       <div className="p-6">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3 bg-white border border-slate-200">
-            <TabsTrigger value="explore" className="flex items-center space-x-2">
+        <Tabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className="space-y-6"
+        >
+          <TabsList className="grid w-full grid-cols-4 bg-white border border-slate-200">
+            <TabsTrigger
+              value="explore"
+              className="flex items-center space-x-2"
+            >
               <Search className="w-4 h-4" />
               <span>Explore Jobs</span>
             </TabsTrigger>
-            <TabsTrigger value="applications" className="flex items-center space-x-2">
+            <TabsTrigger
+              value="applications"
+              className="flex items-center space-x-2"
+            >
               <Briefcase className="w-4 h-4" />
               <span>My Applications</span>
             </TabsTrigger>
@@ -387,8 +454,11 @@ export default function StudentDashboard() {
               <MessageCircle className="w-4 h-4" />
               <span>Messages</span>
             </TabsTrigger>
+            <TabsTrigger value="profile" className="flex items-center space-x-2">
+              <User className="w-4 h-4" />
+              <span>Profile</span>
+            </TabsTrigger>
           </TabsList>
-
           {/* Explore Jobs Tab */}
           <TabsContent value="explore" className="space-y-6">
             <div className="flex items-center space-x-4">
@@ -403,90 +473,224 @@ export default function StudentDashboard() {
               </div>
             </div>
 
+            {/* Filters */}
+            <div className="bg-white rounded-lg shadow-sm border p-4 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Skills
+                  </label>
+                  <Select value={skillFilter} onValueChange={setSkillFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="All skills" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All skills</SelectItem>
+                      {allSkills.map((skill) => (
+                        <SelectItem key={skill} value={skill}>
+                          {skill}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Budget Range
+                  </label>
+                  <Select value={budgetFilter} onValueChange={setBudgetFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="All budgets" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All budgets</SelectItem>
+                      <SelectItem value="0-1000">$0 - $1,000</SelectItem>
+                      <SelectItem value="1000-5000">$1,000 - $5,000</SelectItem>
+                      <SelectItem value="5000-10000">
+                        $5,000 - $10,000
+                      </SelectItem>
+                      <SelectItem value="10000-50000">$10,000+</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-end">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setSearchTerm("");
+                      setSkillFilter("all");
+                      setBudgetFilter("all");
+                    }}
+                    className="w-full"
+                  >
+                    Clear Filters
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* Results Summary */}
+            <div className="mb-6">
+              <p className="text-gray-600">
+                Showing {filteredJobs.length} of {jobs.length} jobs
+                {searchTerm && ` matching "${searchTerm}"`}
+              </p>
+            </div>
+
             <div className="grid gap-6">
-              {currentJobs.map((job) => (
-                <Card key={job.id} className="hover:shadow-md transition-shadow">
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start space-x-4">
-                        <Avatar className="w-12 h-12">
-                          <AvatarImage src={job.companyLogo || "/placeholder.svg"} alt={job.company} />
-                          <AvatarFallback>{job.company.charAt(0)}</AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <CardTitle className="text-lg font-semibold text-slate-900">{job.title}</CardTitle>
-                          <CardDescription className="text-slate-600">{job.company}</CardDescription>
-                          <div className="flex items-center space-x-4 mt-2 text-sm text-slate-500">
-                            <div className="flex items-center space-x-1">
-                              <MapPin className="w-4 h-4" />
-                              <span>{job.location}</span>
-                            </div>
-                            <div className="flex items-center space-x-1">
-                              <DollarSign className="w-4 h-4" />
-                              <span>{job.salary}</span>
-                            </div>
-                            <div className="flex items-center space-x-1">
-                              <Clock className="w-4 h-4" />
-                              <span>{job.type}</span>
+              {currentJobs.map((job) => {
+                const hasApplied = appliedJobIds.has(job._id);
+                const proposalStatus = getProposalStatus(job._id);
+
+                return (
+                  <Card
+                    key={job._id}
+                    className="hover:shadow-md transition-shadow"
+                  >
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start space-x-4">
+                          <Avatar className="w-12 h-12">
+                            <AvatarImage
+                              src={job.companyLogo || "/placeholder.svg"}
+                              alt={job.company}
+                            />
+                            <AvatarFallback>
+                              {job.company?.charAt(0) || "C"}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <CardTitle className="text-lg font-semibold text-slate-900">
+                              {job.title || "Job Title"}
+                            </CardTitle>
+                            <CardDescription className="text-slate-600">
+                              {job.company || "Company Name"}
+                            </CardDescription>
+                            <div className="flex items-center space-x-4 mt-2 text-sm text-slate-500">
+                              <div className="flex items-center space-x-1">
+                                <MapPin className="w-4 h-4" />
+                                <span>{job.location || "Remote"}</span>
+                              </div>
+                              <div className="flex items-center space-x-1">
+                                <DollarSign className="w-4 h-4" />
+                                <span>
+                                  ${job.budgetMin.toLocaleString()} - $
+                                  {job.budgetMax.toLocaleString()}
+                                </span>
+                              </div>
+                              <div className="flex items-center space-x-1">
+                                <Clock className="w-4 h-4" />
+                                <span>{job.duration}</span>
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                      <div className="flex space-x-2">
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button variant="outline" size="sm">
-                              <Eye className="w-4 h-4 mr-2" />
-                              View Details
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent className="max-w-2xl">
-                            <DialogHeader>
-                              <DialogTitle>{job.title}</DialogTitle>
-                              <DialogDescription>
-                                {job.company} • {job.location}
-                              </DialogDescription>
-                            </DialogHeader>
-                            <div className="space-y-4">
-                              <div>
-                                <h4 className="font-semibold mb-2">Job Description</h4>
-                                <p className="text-slate-600">{job.description}</p>
-                              </div>
-                              <div>
-                                <h4 className="font-semibold mb-2">Requirements</h4>
-                                <div className="flex flex-wrap gap-2">
-                                  {job.requirements.map((req, index) => (
-                                    <Badge key={index} variant="secondary">
-                                      {req}
-                                    </Badge>
-                                  ))}
+                        <div className="flex space-x-2">
+                          {hasApplied && (
+                            <Badge
+                              variant={
+                                proposalStatus === "accepted"
+                                  ? "default"
+                                  : proposalStatus === "rejected"
+                                  ? "destructive"
+                                  : "secondary"
+                              }
+                              className={
+                                proposalStatus === "accepted"
+                                  ? "bg-green-500"
+                                  : ""
+                              }
+                            >
+                              {proposalStatus === "accepted"
+                                ? "Accepted"
+                                : proposalStatus === "rejected"
+                                ? "Rejected"
+                                : "Pending"}
+                            </Badge>
+                          )}
+
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <Button variant="outline" size="sm">
+                                <Eye className="w-4 h-4 mr-2" />
+                                View Details
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent className="max-w-2xl">
+                              <DialogHeader>
+                                <DialogTitle>{job.title}</DialogTitle>
+                                <DialogDescription>
+                                  {job.company} • {job.location}
+                                </DialogDescription>
+                              </DialogHeader>
+                              <div className="space-y-4">
+                                <div>
+                                  <h4 className="font-semibold mb-2">
+                                    Job Description
+                                  </h4>
+                                  <p className="text-slate-600">
+                                    {job.description}
+                                  </p>
+                                </div>
+                                <div>
+                                  <h4 className="font-semibold mb-2">
+                                    Skills Required
+                                  </h4>
+                                  <div className="flex flex-wrap gap-2">
+                                    {job.skillsRequired.map((skill, index) => (
+                                      <Badge key={index} variant="secondary">
+                                        {skill}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div className="flex justify-end space-x-2">
+                                  {!hasApplied ? (
+                                    <Button
+                                      onClick={() => handleApplyToJob(job)}
+                                    >
+                                      Apply Now
+                                    </Button>
+                                  ) : (
+                                    <Button variant="outline" disabled>
+                                      Already Applied
+                                    </Button>
+                                  )}
                                 </div>
                               </div>
-                              <div className="flex justify-end space-x-2">
-                                <Button onClick={() => handleApplyToJob(job)}>Apply Now</Button>
-                              </div>
-                            </div>
-                          </DialogContent>
-                        </Dialog>
-                        <Button onClick={() => handleApplyToJob(job)}>Apply Now</Button>
+                            </DialogContent>
+                          </Dialog>
+
+                          {!hasApplied ? (
+                            <Button onClick={() => handleApplyToJob(job)}>
+                              Apply Now
+                            </Button>
+                          ) : (
+                            <Button variant="outline" disabled>
+                              Applied
+                            </Button>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-slate-600 mb-4">{job.description}</p>
-                    <div className="flex flex-wrap gap-2">
-                      {job.requirements.slice(0, 4).map((req, index) => (
-                        <Badge key={index} variant="secondary">
-                          {req}
-                        </Badge>
-                      ))}
-                      {job.requirements.length > 4 && (
-                        <Badge variant="secondary">+{job.requirements.length - 4} more</Badge>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-slate-600 mb-4">{job.description}</p>
+                      <div className="flex flex-wrap gap-2">
+                        {job.skillsRequired.slice(0, 4).map((skill, index) => (
+                          <Badge key={index} variant="secondary">
+                            {skill}
+                          </Badge>
+                        ))}
+                        {job.skillsRequired.length > 4 && (
+                          <Badge variant="secondary">
+                            +{job.skillsRequired.length - 4} more
+                          </Badge>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
 
             {/* Jobs Pagination */}
@@ -495,28 +699,32 @@ export default function StudentDashboard() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => handleJobsPageChange(jobsCurrentPage - 1)}
+                  onClick={() => setJobsCurrentPage(jobsCurrentPage - 1)}
                   disabled={jobsCurrentPage === 1}
                 >
                   Previous
                 </Button>
                 <div className="flex items-center space-x-1">
-                  {Array.from({ length: totalJobsPages }, (_, i) => i + 1).map((page) => (
-                    <Button
-                      key={page}
-                      variant={page === jobsCurrentPage ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => handleJobsPageChange(page)}
-                      className="w-8 h-8 p-0"
-                    >
-                      {page}
-                    </Button>
-                  ))}
+                  {Array.from({ length: totalJobsPages }, (_, i) => i + 1).map(
+                    (page) => (
+                      <Button
+                        key={page}
+                        variant={
+                          page === jobsCurrentPage ? "default" : "outline"
+                        }
+                        size="sm"
+                        onClick={() => setJobsCurrentPage(page)}
+                        className="w-8 h-8 p-0"
+                      >
+                        {page}
+                      </Button>
+                    )
+                  )}
                 </div>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => handleJobsPageChange(jobsCurrentPage + 1)}
+                  onClick={() => setJobsCurrentPage(jobsCurrentPage + 1)}
                   disabled={jobsCurrentPage === totalJobsPages}
                 >
                   Next
@@ -524,56 +732,149 @@ export default function StudentDashboard() {
               </div>
             )}
           </TabsContent>
-
           {/* My Applications Tab */}
+          
           <TabsContent value="applications" className="space-y-6">
-            <div className="grid gap-4">
-              {currentApplications.map((application) => (
-                <Card key={application.id}>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <CardTitle className="text-lg">{application.jobTitle}</CardTitle>
-                        <CardDescription>{application.company}</CardDescription>
-                      </div>
-                      {getStatusBadge(application.status)}
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm text-slate-500">
-                        Applied on {new Date(application.appliedDate).toLocaleDateString()}
-                      </div>
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <Button variant="outline" size="sm">
-                            View Proposal
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                          <DialogHeader>
-                            <DialogTitle>Application Proposal</DialogTitle>
-                            <DialogDescription>
-                              {application.jobTitle} at {application.company}
-                            </DialogDescription>
-                          </DialogHeader>
-                          <div className="space-y-4">
-                            <div>
-                              <Label className="font-semibold">Cover Letter</Label>
-                              <p className="text-slate-600 mt-1">{application.proposal}</p>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <span className="text-sm text-slate-500">Status:</span>
-                              {getStatusBadge(application.status)}
-                            </div>
-                          </div>
-                        </DialogContent>
-                      </Dialog>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h1 className="text-2xl font-bold">My Applications</h1>
+                <p className="text-gray-600 mt-1">
+                  Track your job applications and their status
+                </p>
+              </div>
+              <Link href="/dashboard/student/proposals">
+                <Button variant="outline">
+                  View All Proposals 
+                </Button>
+              </Link>
             </div>
+
+            {/* Status Summary */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <Card>
+                <CardContent className="p-4">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-blue-600">
+                      {proposals.filter((p) => p.status === "pending").length}
+                    </div>
+                    <div className="text-sm text-gray-600">Pending</div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-green-600">
+                      {proposals.filter((p) => p.status === "accepted").length}
+                    </div>
+                    <div className="text-sm text-gray-600">Accepted</div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-red-600">
+                      {proposals.filter((p) => p.status === "rejected").length}
+                    </div>
+                    <div className="text-sm text-gray-600">Rejected</div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-gray-600">
+                      {proposals.filter((p) => p.status === "withdrawn").length}
+                    </div>
+                    <div className="text-sm text-gray-600">Withdrawn</div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Proposals List */}
+            {currentApplications.length === 0 ? (
+              <div className="text-center py-16">
+                <div className="text-6xl mb-4">📝</div>
+                <h2 className="text-xl font-semibold mb-2">
+                  No applications yet
+                </h2>
+                <p className="text-gray-500 mb-6">
+                  Start applying to jobs to see your applications here
+                </p>
+                <Link href="/dashboard/student">
+                  <Button>Browse Available Jobs</Button>
+                </Link>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {currentApplications.map((application) => {
+                  const job = getJobDetails(application.jobId);
+                  if (!job) return null;
+
+                  return (
+                    <Card
+                      key={application._id}
+                      className="hover:shadow-md transition-shadow"
+                    >
+                      <CardHeader>
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <CardTitle className="text-lg">
+                              <Link
+                                href={`/dashboard/student/jobs/${application.jobId}`}
+                                className="hover:text-blue-600"
+                              >
+                                {job.title}
+                              </Link>
+                            </CardTitle>
+                            <CardDescription>
+                              {job.company} • Submitted on{" "}
+                              {new Date(
+                                application.createdAt
+                              ).toLocaleDateString()}
+                            </CardDescription>
+                          </div>
+                          <div className="flex flex-col items-end gap-2">
+                            {getStatusBadge(application.status)}
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="mb-4 text-gray-700 line-clamp-2">
+                          {application.coverLetter}
+                        </p>
+
+                        <div className="flex justify-between items-center">
+                          <span className="font-medium text-lg">
+                            ${job.budgetMin.toLocaleString()} - $
+                            {job.budgetMax.toLocaleString()}
+                          </span>
+
+                          <div className="flex gap-2">
+                            <Link
+                              href={`/dashboard/student/proposals/${application._id}`}
+                            >
+                              <Button variant="outline" size="sm">
+                                View Details
+                              </Button>
+                            </Link>
+                            <Link
+                              href={`/dashboard/student/jobs/${application.jobId}`}
+                            >
+                              <Button variant="outline" size="sm">
+                                View Job
+                              </Button>
+                            </Link>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Applications Pagination */}
             {totalApplicationsPages > 1 && (
@@ -581,18 +882,25 @@ export default function StudentDashboard() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => handleApplicationsPageChange(applicationsCurrentPage - 1)}
+                  onClick={() =>
+                    setApplicationsCurrentPage(applicationsCurrentPage - 1)
+                  }
                   disabled={applicationsCurrentPage === 1}
                 >
                   Previous
                 </Button>
                 <div className="flex items-center space-x-1">
-                  {Array.from({ length: totalApplicationsPages }, (_, i) => i + 1).map((page) => (
+                  {Array.from(
+                    { length: totalApplicationsPages },
+                    (_, i) => i + 1
+                  ).map((page) => (
                     <Button
                       key={page}
-                      variant={page === applicationsCurrentPage ? "default" : "outline"}
+                      variant={
+                        page === applicationsCurrentPage ? "default" : "outline"
+                      }
                       size="sm"
-                      onClick={() => handleApplicationsPageChange(page)}
+                      onClick={() => setApplicationsCurrentPage(page)}
                       className="w-8 h-8 p-0"
                     >
                       {page}
@@ -602,7 +910,9 @@ export default function StudentDashboard() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => handleApplicationsPageChange(applicationsCurrentPage + 1)}
+                  onClick={() =>
+                    setApplicationsCurrentPage(applicationsCurrentPage + 1)
+                  }
                   disabled={applicationsCurrentPage === totalApplicationsPages}
                 >
                   Next
@@ -610,7 +920,6 @@ export default function StudentDashboard() {
               </div>
             )}
           </TabsContent>
-
           {/* Messages Tab */}
           <TabsContent value="chat" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[600px]">
@@ -618,28 +927,42 @@ export default function StudentDashboard() {
               <Card className="lg:col-span-1">
                 <CardHeader>
                   <CardTitle className="text-lg">Messages</CardTitle>
-                  <CardDescription>Chat with companies that accepted your applications</CardDescription>
+                  <CardDescription>
+                    Chat with companies that accepted your applications
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="p-0">
                   <ScrollArea className="h-[500px]">
-                    {acceptedConversations.map((conversation) => (
+                    {chats.map((conversation) => (
                       <div
                         key={conversation.id}
                         className={`p-4 border-b cursor-pointer hover:bg-slate-50 ${
-                          selectedChat?.id === conversation.id ? "bg-indigo-50 border-indigo-200" : ""
+                          selectedChat?.id === conversation.id
+                            ? "bg-indigo-50 border-indigo-200"
+                            : ""
                         }`}
                         onClick={() => setSelectedChat(conversation)}
                       >
                         <div className="flex items-center justify-between mb-2">
-                          <h4 className="font-medium text-sm">{conversation.company}</h4>
+                          <h4 className="font-medium text-sm">
+                            {conversation.company}
+                          </h4>
                           {conversation.unread > 0 && (
-                            <Badge className="bg-indigo-600 text-white text-xs">{conversation.unread}</Badge>
+                            <Badge className="bg-indigo-600 text-white text-xs">
+                              {conversation.unread}
+                            </Badge>
                           )}
                         </div>
-                        <p className="text-xs text-slate-500 mb-1">{conversation.jobTitle}</p>
-                        <p className="text-sm text-slate-600 truncate">{conversation.lastMessage}</p>
+                        <p className="text-xs text-slate-500 mb-1">
+                          {conversation.jobTitle}
+                        </p>
+                        <p className="text-sm text-slate-600 truncate">
+                          {conversation.lastMessage}
+                        </p>
                         <p className="text-xs text-slate-400 mt-1">
-                          {new Date(conversation.timestamp).toLocaleDateString()}
+                          {new Date(
+                            conversation.timestamp
+                          ).toLocaleDateString()}
                         </p>
                       </div>
                     ))}
@@ -652,16 +975,22 @@ export default function StudentDashboard() {
                 {selectedChat ? (
                   <>
                     <CardHeader className="border-b">
-                      <CardTitle className="text-lg">{selectedChat.company}</CardTitle>
+                      <CardTitle className="text-lg">
+                        {selectedChat.company}
+                      </CardTitle>
                       <CardDescription>{selectedChat.jobTitle}</CardDescription>
                     </CardHeader>
                     <CardContent className="p-0">
                       <ScrollArea className="h-[400px] p-4">
                         <div className="space-y-4">
-                          {selectedChat.messages.map((message: any) => (
+                          {selectedChat.messages.map((message) => (
                             <div
                               key={message.id}
-                              className={`flex ${message.sender === "student" ? "justify-end" : "justify-start"}`}
+                              className={`flex ${
+                                message.sender === "student"
+                                  ? "justify-end"
+                                  : "justify-start"
+                              }`}
                             >
                               <div
                                 className={`max-w-[70%] p-3 rounded-lg ${
@@ -673,10 +1002,14 @@ export default function StudentDashboard() {
                                 <p className="text-sm">{message.content}</p>
                                 <p
                                   className={`text-xs mt-1 ${
-                                    message.sender === "student" ? "text-indigo-200" : "text-slate-500"
+                                    message.sender === "student"
+                                      ? "text-indigo-200"
+                                      : "text-slate-500"
                                   }`}
                                 >
-                                  {new Date(message.timestamp).toLocaleTimeString()}
+                                  {new Date(
+                                    message.timestamp
+                                  ).toLocaleTimeString()}
                                 </p>
                               </div>
                             </div>
@@ -690,7 +1023,9 @@ export default function StudentDashboard() {
                             placeholder="Type your message..."
                             value={newMessage}
                             onChange={(e) => setNewMessage(e.target.value)}
-                            onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
+                            onKeyPress={(e) =>
+                              e.key === "Enter" && handleSendMessage()
+                            }
                           />
                           <Button onClick={handleSendMessage}>
                             <Send className="w-4 h-4" />
@@ -703,11 +1038,110 @@ export default function StudentDashboard() {
                   <CardContent className="flex items-center justify-center h-full">
                     <div className="text-center">
                       <MessageCircle className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-                      <p className="text-slate-500">Select a conversation to start messaging</p>
+                      <p className="text-slate-500">
+                        Select a conversation to start messaging
+                      </p>
                     </div>
                   </CardContent>
                 )}
               </Card>
+            </div>
+          </TabsContent>
+
+          {/* Profile Tab */}
+          <TabsContent value="profile" className="space-y-6">
+            <div className="bg-white rounded-lg shadow-sm border p-6">
+              <div className="flex items-center space-x-4 mb-6">
+                <Avatar className="h-16 w-16">
+                  <AvatarImage src="/placeholder.svg" />
+                  <AvatarFallback className="text-lg">
+                    {user?.name?.split(" ").map((n) => n[0]).join("")}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">Profile Settings</h2>
+                  <p className="text-gray-600">Update your personal information and preferences</p>
+                </div>
+              </div>
+
+              <form className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <Label htmlFor="name">Full Name</Label>
+                    <Input
+                      id="name"
+                      defaultValue={user?.name || ""}
+                      placeholder="Enter your full name"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      defaultValue={user?.email || ""}
+                      placeholder="Enter your email"
+                      disabled
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="phone">Phone Number</Label>
+                    <Input
+                      id="phone"
+                      defaultValue={user?.phone || ""}
+                      placeholder="Enter your phone number"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="role">Role</Label>
+                    <Input
+                      id="role"
+                      value={user?.role || ""}
+                      disabled
+                      className="bg-gray-50"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="bio">Bio</Label>
+                  <Textarea
+                    id="bio"
+                    placeholder="Tell us about yourself, your skills, and what you're looking for..."
+                    className="min-h-[100px]"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <Label htmlFor="skills">Skills (comma-separated)</Label>
+                    <Input
+                      id="skills"
+                      placeholder="e.g., React, Node.js, Python, UI/UX Design"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="experience">Years of Experience</Label>
+                    <Select>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select experience level" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="0-1">0-1 years</SelectItem>
+                        <SelectItem value="1-3">1-3 years</SelectItem>
+                        <SelectItem value="3-5">3-5 years</SelectItem>
+                        <SelectItem value="5-10">5-10 years</SelectItem>
+                        <SelectItem value="10+">10+ years</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="flex justify-end space-x-3">
+                  <Button variant="outline">Cancel</Button>
+                  <Button>Save Changes</Button>
+                </div>
+              </form>
             </div>
           </TabsContent>
         </Tabs>
@@ -730,7 +1164,12 @@ export default function StudentDashboard() {
                   id="coverLetter"
                   placeholder="Tell us why you're interested in this position and what makes you a great fit..."
                   value={applicationForm.coverLetter}
-                  onChange={(e) => setApplicationForm({ ...applicationForm, coverLetter: e.target.value })}
+                  onChange={(e) =>
+                    setApplicationForm({
+                      ...applicationForm,
+                      coverLetter: e.target.value,
+                    })
+                  }
                   className="min-h-[120px]"
                 />
               </div>
@@ -740,7 +1179,12 @@ export default function StudentDashboard() {
                   id="portfolio"
                   placeholder="https://your-portfolio.com or link to resume"
                   value={applicationForm.portfolio}
-                  onChange={(e) => setApplicationForm({ ...applicationForm, portfolio: e.target.value })}
+                  onChange={(e) =>
+                    setApplicationForm({
+                      ...applicationForm,
+                      portfolio: e.target.value,
+                    })
+                  }
                 />
               </div>
               <div>
@@ -749,14 +1193,22 @@ export default function StudentDashboard() {
                   id="availability"
                   placeholder="When can you start? (e.g., Immediately, After finals, etc.)"
                   value={applicationForm.availability}
-                  onChange={(e) => setApplicationForm({ ...applicationForm, availability: e.target.value })}
+                  onChange={(e) =>
+                    setApplicationForm({
+                      ...applicationForm,
+                      availability: e.target.value,
+                    })
+                  }
                 />
               </div>
               <div className="flex justify-end space-x-2">
                 <Button variant="outline" onClick={() => setSelectedJob(null)}>
                   Cancel
                 </Button>
-                <Button onClick={handleSubmitApplication} disabled={!applicationForm.coverLetter.trim()}>
+                <Button
+                  onClick={handleSubmitApplication}
+                  disabled={!applicationForm.coverLetter.trim()}
+                >
                   Submit Application
                 </Button>
               </div>
@@ -765,5 +1217,5 @@ export default function StudentDashboard() {
         </Dialog>
       )}
     </div>
-  )
+  );
 }

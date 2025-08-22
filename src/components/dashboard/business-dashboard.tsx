@@ -1,23 +1,18 @@
-"use client"
-
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import { Label } from "@/components/ui/label"
-import { ScrollArea } from "@/components/ui/scroll-area"
+'use client';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Building2,
   Users,
@@ -33,269 +28,255 @@ import {
   Send,
   ChevronLeft,
   ChevronRight,
-} from "lucide-react"
+} from "lucide-react";
+import { Job } from '@/types/job';
+import CreateJobForm from '@/app/dashboard/business/CreateJobForm';
+import { useAuth } from '@/context/AuthContext';
 
-type ApplicationStatus = "pending" | "accepted" | "declined"
+type ApplicationStatus = "pending" | "accepted" | "declined";
 
 interface JobApplication {
-  id: string
-  applicantName: string
-  email: string
-  phone: string
-  position: string
-  university: string
-  gpa: string
-  skills: string[]
-  coverLetter: string
-  appliedDate: string
-  status: ApplicationStatus
-  avatar?: string
-}
-
-interface JobPost {
-  id: string
-  title: string
-  department: string
-  location: string
-  type: string
-  description: string
-  requirements: string[]
-  postedDate: string
-  status: "active" | "closed"
+  _id: string;
+  jobId: {
+    _id: string;
+    title: string;
+  };
+  studentId: {
+    _id: string;
+    name: string;
+    email: string;
+    avatar?: string;
+  };
+  coverLetter: string;
+  milestones: Array<{
+    title: string;
+    amount: number;
+    dueDate: string;
+  }>;
+  quoteAmount: number;
+  status: ApplicationStatus;
+  submittedAt: string;
 }
 
 interface ChatMessage {
-  id: string
-  senderId: string
-  senderName: string
-  message: string
-  timestamp: string
-  isFromBusiness: boolean
+  id: string;
+  senderId: string;
+  senderName: string;
+  message: string;
+  timestamp: string;
+  isFromBusiness: boolean;
 }
 
 interface ChatConversation {
-  applicationId: string
-  applicantName: string
-  messages: ChatMessage[]
+  applicationId: string;
+  applicantName: string;
+  messages: ChatMessage[];
 }
 
-const mockApplications: JobApplication[] = [
-  {
-    id: "1",
-    applicantName: "Sarah Johnson",
-    email: "sarah.johnson@university.edu",
-    phone: "+1 (555) 123-4567",
-    position: "Frontend Developer Intern",
-    university: "Stanford University",
-    gpa: "3.8",
-    skills: ["React", "TypeScript", "CSS", "JavaScript"],
-    coverLetter:
-      "I am excited to apply for the Frontend Developer Intern position. With my strong background in React and TypeScript, I believe I can contribute effectively to your team.",
-    appliedDate: "2024-01-15",
-    status: "pending",
-    avatar: "/professional-woman-diverse.png",
-  },
-  {
-    id: "2",
-    applicantName: "Michael Chen",
-    email: "m.chen@tech.edu",
-    phone: "+1 (555) 987-6543",
-    position: "Backend Developer Intern",
-    university: "MIT",
-    gpa: "3.9",
-    skills: ["Node.js", "Python", "PostgreSQL", "AWS"],
-    coverLetter:
-      "As a computer science student with experience in backend technologies, I am eager to contribute to your development team and learn from industry professionals.",
-    appliedDate: "2024-01-14",
-    status: "accepted",
-    avatar: "/professional-man.png",
-  },
-  {
-    id: "3",
-    applicantName: "Emily Rodriguez",
-    email: "emily.r@design.edu",
-    phone: "+1 (555) 456-7890",
-    position: "UX Designer Intern",
-    university: "UC Berkeley",
-    gpa: "3.7",
-    skills: ["Figma", "Adobe XD", "User Research", "Prototyping"],
-    coverLetter:
-      "I am passionate about creating user-centered designs and would love to bring my creative skills and fresh perspective to your design team.",
-    appliedDate: "2024-01-13",
-    status: "declined",
-    avatar: "/professional-woman-designer.png",
-  },
-  {
-    id: "4",
-    applicantName: "David Kim",
-    email: "david.kim@cs.edu",
-    phone: "+1 (555) 321-0987",
-    position: "Full Stack Developer Intern",
-    university: "Carnegie Mellon",
-    gpa: "3.85",
-    skills: ["React", "Node.js", "MongoDB", "Docker"],
-    coverLetter:
-      "With experience in both frontend and backend development, I am excited about the opportunity to work on full-stack projects and contribute to your engineering team.",
-    appliedDate: "2024-01-12",
-    status: "pending",
-    avatar: "/professional-man-developer.png",
-  },
-  {
-    id: "5",
-    applicantName: "Jessica Wang",
-    email: "j.wang@data.edu",
-    phone: "+1 (555) 654-3210",
-    position: "Data Science Intern",
-    university: "Harvard University",
-    gpa: "3.95",
-    skills: ["Python", "R", "Machine Learning", "SQL"],
-    coverLetter:
-      "As a data science student with strong analytical skills, I am eager to apply my knowledge to real-world problems and contribute to data-driven decision making.",
-    appliedDate: "2024-01-11",
-    status: "pending",
-    avatar: "/professional-woman-scientist.png",
-  },
-]
-
-const mockJobPosts: JobPost[] = [
-  {
-    id: "1",
-    title: "Frontend Developer Intern",
-    department: "Engineering",
-    location: "San Francisco, CA",
-    type: "Internship",
-    description: "Join our frontend team to build amazing user experiences using React and TypeScript.",
-    requirements: ["React", "TypeScript", "CSS", "Git"],
-    postedDate: "2024-01-10",
-    status: "active",
-  },
-  {
-    id: "2",
-    title: "Backend Developer Intern",
-    department: "Engineering",
-    location: "Remote",
-    type: "Internship",
-    description: "Work on scalable backend systems using Node.js and cloud technologies.",
-    requirements: ["Node.js", "Python", "AWS", "Database"],
-    postedDate: "2024-01-08",
-    status: "active",
-  },
-]
-
-const mockChatConversations: ChatConversation[] = [
-  {
-    applicationId: "2",
-    applicantName: "Michael Chen",
-    messages: [
-      {
-        id: "1",
-        senderId: "business",
-        senderName: "Business User",
-        message:
-          "Hi Michael! Congratulations on being accepted for the Backend Developer Intern position. We're excited to have you join our team!",
-        timestamp: "2024-01-16T10:00:00Z",
-        isFromBusiness: true,
-      },
-      {
-        id: "2",
-        senderId: "2",
-        senderName: "Michael Chen",
-        message:
-          "Thank you so much! I'm thrilled about this opportunity. When would be a good time to discuss the next steps?",
-        timestamp: "2024-01-16T10:15:00Z",
-        isFromBusiness: false,
-      },
-      {
-        id: "3",
-        senderId: "business",
-        senderName: "Business User",
-        message:
-          "Great! Let's schedule a call for tomorrow at 2 PM to go over the onboarding process and answer any questions you might have.",
-        timestamp: "2024-01-16T10:30:00Z",
-        isFromBusiness: true,
-      },
-    ],
-  },
-]
-
 export default function BusinessDashboard() {
-  const [applications, setApplications] = useState<JobApplication[]>(mockApplications)
-  const [selectedApplication, setSelectedApplication] = useState<JobApplication | null>(null)
-  const [activeTab, setActiveTab] = useState("applications")
-  const [jobPosts, setJobPosts] = useState<JobPost[]>(mockJobPosts)
-  const [chatConversations, setChatConversations] = useState<ChatConversation[]>(mockChatConversations)
-  const [newMessage, setNewMessage] = useState("")
-  const [selectedChat, setSelectedChat] = useState<string | null>(null)
-  const [showJobPostForm, setShowJobPostForm] = useState(false)
+  const router = useRouter();
+  const { user, isAuthenticated, loading: authLoading } = useAuth();
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [proposals, setProposals] = useState<JobApplication[]>([]);
+  const [selectedApplication, setSelectedApplication] = useState<JobApplication | null>(null);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [authChecking, setAuthChecking] = useState(true);
+  const [chatConversations, setChatConversations] = useState<ChatConversation[]>([]);
+  const [newMessage, setNewMessage] = useState("");
+  const [selectedChat, setSelectedChat] = useState<string | null>(null);
   const [newJobPost, setNewJobPost] = useState({
     title: "",
-    department: "",
-    location: "",
-    type: "Internship",
     description: "",
-    requirements: "",
-  })
+    skillsRequired: "",
+    budgetMin: "",
+    budgetMax: "",
+  });
+  const [applicationsPage, setApplicationsPage] = useState(1);
+  const [jobPostsPage, setJobPostsPage] = useState(1);
+  const applicationsPerPage = 5;
+  const jobPostsPerPage = 5;
 
-  const [applicationsPage, setApplicationsPage] = useState(1)
-  const [jobPostsPage, setJobPostsPage] = useState(1)
-  const applicationsPerPage = 5
-  const jobPostsPerPage = 5
+  // Check authentication and role
+  useEffect(() => {
+    console.log('BusinessDashboard - Auth state:', { isAuthenticated, authLoading, user });
+    
+    if (!authLoading) {
+      if (!isAuthenticated) {
+        console.log('BusinessDashboard - Not authenticated, redirecting to login');
+        router.push('/auth/login');
+        return;
+      }
+      
+      if (user && user.role !== 'business') {
+        console.log('BusinessDashboard - Wrong role, redirecting to unauthorized');
+        router.push('/unauthorized');
+        return;
+      }
+      
+      console.log('BusinessDashboard - Authentication check passed');
+      setAuthChecking(false);
+    }
+  }, [isAuthenticated, authLoading, user, router]);
 
-  const handleStatusChange = (applicationId: string, newStatus: ApplicationStatus) => {
-    setApplications((prev) => prev.map((app) => (app.id === applicationId ? { ...app, status: newStatus } : app)))
-  }
+  useEffect(() => {
+    if (authChecking) return;
+
+    const fetchData = async () => {
+      if (!isAuthenticated || !user) {
+        setError('Authentication required. Please log in.');
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+
+        // Fetch jobs with credentials (cookies will be sent automatically)
+        const jobsResponse = await fetch('/api/jobs', {
+          method: 'GET',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (jobsResponse.ok) {
+          const jobsData = await jobsResponse.json();
+          setJobs(jobsData.jobs || []);
+        } else {
+          const errorData = await jobsResponse.json();
+          setError(errorData.error || 'Failed to fetch jobs');
+        }
+
+        // Fetch proposals with credentials (cookies will be sent automatically)
+        const proposalsResponse = await fetch('/api/proposals', {
+          method: 'GET',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (proposalsResponse.ok) {
+          const proposalsData = await proposalsResponse.json();
+          setProposals(proposalsData.proposals || []);
+        } else {
+          const errorData = await proposalsResponse.json();
+          setError(errorData.error || 'Failed to fetch proposals');
+        }
+      } catch (err) {
+        console.error('Fetch error:', err);
+        setError('Network error. Please check your connection and try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [isAuthenticated, user, authChecking]);
+
+  const handleJobCreated = (newJob: Job) => {
+    setJobs([newJob, ...jobs]);
+    setShowCreateForm(false);
+  };
+
+  const handleStatusChange = async (proposalId: string, newStatus: ApplicationStatus) => {
+    try {
+      const response = await fetch(`/api/proposals/${proposalId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (response.ok) {
+        setProposals((prev) =>
+          prev.map((proposal) =>
+            proposal._id === proposalId ? { ...proposal, status: newStatus } : proposal
+          )
+        );
+      } else {
+        const errorData = await response.json();
+        setError(errorData.error || 'Failed to update proposal status');
+      }
+    } catch (error) {
+      console.error('Failed to update proposal status:', error);
+      setError('Failed to update proposal status');
+    }
+  };
 
   const getStatusBadge = (status: ApplicationStatus) => {
     switch (status) {
       case "accepted":
-        return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Accepted</Badge>
+        return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Accepted</Badge>;
       case "declined":
-        return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">Declined</Badge>
+        return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">Declined</Badge>;
       case "pending":
-        return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Pending</Badge>
+        return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Pending</Badge>;
       default:
-        return <Badge variant="secondary">Unknown</Badge>
+        return <Badge variant="secondary">Unknown</Badge>;
     }
-  }
+  };
 
   const getStatusCounts = () => {
-    return applications.reduce(
-      (acc, app) => {
-        acc[app.status] = (acc[app.status] || 0) + 1
-        return acc
+    return proposals.reduce(
+      (acc, proposal) => {
+        acc[proposal.status] = (acc[proposal.status] || 0) + 1;
+        return acc;
       },
       {} as Record<ApplicationStatus, number>,
-    )
-  }
+    );
+  };
 
-  const statusCounts = getStatusCounts()
+  const statusCounts = getStatusCounts();
 
-  const handleCreateJobPost = () => {
-    const jobPost: JobPost = {
-      id: Date.now().toString(),
-      title: newJobPost.title,
-      department: newJobPost.department,
-      location: newJobPost.location,
-      type: newJobPost.type,
-      description: newJobPost.description,
-      requirements: newJobPost.requirements.split(",").map((req) => req.trim()),
-      postedDate: new Date().toISOString().split("T")[0],
-      status: "active",
+  const handleCreateJobPost = async () => {
+    try {
+      const jobData = {
+        title: newJobPost.title,
+        description: newJobPost.description,
+        skillsRequired: newJobPost.skillsRequired.split(",").map((skill) => skill.trim()),
+        budgetMin: Number(newJobPost.budgetMin),
+        budgetMax: Number(newJobPost.budgetMax),
+        milestones: [],
+      };
+
+      const response = await fetch('/api/jobs', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify(jobData),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setJobs([data.job, ...jobs]);
+        setNewJobPost({
+          title: "",
+          description: "",
+          skillsRequired: "",
+          budgetMin: "",
+          budgetMax: "",
+        });
+        setShowCreateForm(false);
+      } else {
+        const errorData = await response.json();
+        setError(errorData.error || 'Failed to create job');
+      }
+    } catch (error) {
+      console.error('Failed to create job:', error);
+      setError('Failed to create job');
     }
-    setJobPosts([jobPost, ...jobPosts])
-    setNewJobPost({
-      title: "",
-      department: "",
-      location: "",
-      type: "Internship",
-      description: "",
-      requirements: "",
-    })
-    setShowJobPostForm(false)
-  }
+  };
 
   const handleSendMessage = (applicationId: string) => {
-    if (!newMessage.trim()) return
+    if (!newMessage.trim()) return;
 
     const message: ChatMessage = {
       id: Date.now().toString(),
@@ -304,50 +285,66 @@ export default function BusinessDashboard() {
       message: newMessage,
       timestamp: new Date().toISOString(),
       isFromBusiness: true,
-    }
+    };
 
-    setChatConversations((prev) =>
-      prev.map((conv) =>
-        conv.applicationId === applicationId ? { ...conv, messages: [...conv.messages, message] } : conv,
-      ),
-    )
-    setNewMessage("")
-  }
+    setChatConversations((prev) => {
+      const existingConv = prev.find(conv => conv.applicationId === applicationId);
+
+      if (existingConv) {
+        return prev.map(conv =>
+          conv.applicationId === applicationId
+            ? { ...conv, messages: [...conv.messages, message] }
+            : conv
+        );
+      } else {
+        return [
+          ...prev,
+          {
+            applicationId,
+            applicantName: proposals.find(p => p._id === applicationId)?.studentId.name || '',
+            messages: [message]
+          }
+        ];
+      }
+    });
+
+    setNewMessage("");
+  };
 
   const getAcceptedApplications = () => {
-    return applications.filter((app) => app.status === "accepted")
-  }
+    return proposals.filter((proposal) => proposal.status === "accepted");
+  };
 
   const getPaginatedApplications = () => {
-    const startIndex = (applicationsPage - 1) * applicationsPerPage
-    const endIndex = startIndex + applicationsPerPage
-    return applications.slice(startIndex, endIndex)
-  }
+    const startIndex = (applicationsPage - 1) * applicationsPerPage;
+    const endIndex = startIndex + applicationsPerPage;
+    return proposals.slice(startIndex, endIndex);
+  };
 
   const getPaginatedJobPosts = () => {
-    const startIndex = (jobPostsPage - 1) * jobPostsPerPage
-    const endIndex = startIndex + jobPostsPerPage
-    return jobPosts.slice(startIndex, endIndex)
-  }
+    const startIndex = (jobPostsPage - 1) * jobPostsPerPage;
+    const endIndex = startIndex + jobPostsPerPage;
+    return jobs.slice(startIndex, endIndex);
+  };
 
   const getTotalApplicationsPages = () => {
-    return Math.ceil(applications.length / applicationsPerPage)
-  }
+    return Math.max(1, Math.ceil(proposals.length / applicationsPerPage));
+  };
 
   const getTotalJobPostsPages = () => {
-    return Math.ceil(jobPosts.length / jobPostsPerPage)
-  }
+    return Math.max(1, Math.ceil(jobs.length / jobPostsPerPage));
+  };
 
   const PaginationControls = ({
     currentPage,
     totalPages,
     onPageChange,
   }: {
-    currentPage: number
-    totalPages: number
-    onPageChange: (page: number) => void
+    currentPage: number;
+    totalPages: number;
+    onPageChange: (page: number) => void;
   }) => {
-    if (totalPages <= 1) return null
+    if (totalPages <= 1) return null;
 
     return (
       <div className="flex items-center justify-between mt-4">
@@ -375,53 +372,58 @@ export default function BusinessDashboard() {
           </Button>
         </div>
       </div>
-    )
+    );
+  };
+
+  if (authChecking) {
+    return <div className="text-center py-10">Checking authentication...</div>;
+  }
+
+  if (loading) {
+    return <div className="text-center py-10">Loading dashboard...</div>;
+  }
+
+  if (error) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="text-center py-10 text-red-600">
+          <p className="mb-4">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      {/* <header className="border-b border-border bg-card">
-        <div className="flex h-16 items-center justify-between px-6">
-          <div className="flex items-center gap-2">
-            <Building2 className="h-8 w-8 text-primary" />
-            <h1 className="text-xl font-sans font-bold text-foreground">FreelanceHub</h1>
-          </div>
-          <div className="flex items-center gap-4">
-            <Avatar>
-              <AvatarImage src="/business-user.png" />
-              <AvatarFallback>BU</AvatarFallback>
-            </Avatar>
-            <span className="text-sm text-muted-foreground">Business User</span>
-          </div>
-        </div>
-      </header> */}
-
       <div className="flex">
         {/* Sidebar */}
         <aside className="w-64 border-r border-sidebar-border bg-sidebar p-6">
           <nav className="space-y-2">
-            <Button
-              variant={activeTab === "applications" ? "default" : "ghost"}
-              className="w-full justify-start"
-              onClick={() => setActiveTab("applications")}
-            >
-              <Users className="mr-2 h-4 w-4" />
-              Applications
-            </Button>
-            <Button
-              variant={activeTab === "jobposts" ? "default" : "ghost"}
-              className="w-full justify-start"
-              onClick={() => setActiveTab("jobposts")}
-            >
-              <Building2 className="mr-2 h-4 w-4" />
-              Job Posts
-            </Button>
-            <Button
-              variant={activeTab === "chat" ? "default" : "ghost"}
-              className="w-full justify-start"
-              onClick={() => setActiveTab("chat")}
-            >
+            <Link href="/dashboard/business">
+              <Button variant="ghost" className="w-full justify-start">
+                <Building2 className="mr-2 h-4 w-4" />
+                Dashboard
+              </Button>
+            </Link>
+            <Link href="/dashboard/business/proposals">
+              <Button variant="ghost" className="w-full justify-start">
+                <Users className="mr-2 h-4 w-4" />
+                Proposals
+              </Button>
+            </Link>
+            <Link href="/dashboard/business/jobs">
+              <Button variant="ghost" className="w-full justify-start">
+                <Building2 className="mr-2 h-4 w-4" />
+                Job Posts
+              </Button>
+            </Link>
+            <Button variant="ghost" className="w-full justify-start">
               <MessageCircle className="mr-2 h-4 w-4" />
               Chat
             </Button>
@@ -434,18 +436,24 @@ export default function BusinessDashboard() {
 
         {/* Main Content */}
         <main className="flex-1 p-6">
-          {activeTab === "applications" && (
-            <>
-              <div className="mb-6">
-                <h2 className="text-2xl font-sans font-bold text-foreground mb-2">Job Applications</h2>
-                <p className="text-muted-foreground">Review and manage student applications for your job postings</p>
+          <Tabs defaultValue="proposals" className="w-full">
+            <TabsList className="mb-6">
+              <TabsTrigger value="proposals">Proposals</TabsTrigger>
+              <TabsTrigger value="jobs">Job Posts</TabsTrigger>
+              <TabsTrigger value="chat">Chat</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="proposals" className="space-y-6">
+              <div>
+                <h2 className="text-2xl font-bold mb-2">Job Proposals</h2>
+                <p className="text-muted-foreground">Review and manage student proposals for your job postings</p>
               </div>
 
               {/* Stats Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Pending Applications</CardTitle>
+                    <CardTitle className="text-sm font-medium">Pending Proposals</CardTitle>
                     <Clock className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
@@ -472,278 +480,217 @@ export default function BusinessDashboard() {
                 </Card>
               </div>
 
-              {/* Applications Table */}
+              {/* Proposals Table */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="font-sans">Recent Applications</CardTitle>
+                  <CardTitle>Recent Proposals</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Applicant</TableHead>
-                        <TableHead>Position</TableHead>
-                        <TableHead>University</TableHead>
-                        <TableHead>Applied Date</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {getPaginatedApplications().map((application) => (
-                        <TableRow key={application.id}>
-                          <TableCell>
-                            <div className="flex items-center gap-3">
-                              <Avatar className="h-8 w-8">
-                                <AvatarImage src={application.avatar || "/placeholder.svg"} />
-                                <AvatarFallback>
-                                  {application.applicantName
-                                    .split(" ")
-                                    .map((n) => n[0])
-                                    .join("")}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div>
-                                <div className="font-medium">{application.applicantName}</div>
-                                <div className="text-sm text-muted-foreground">{application.email}</div>
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="font-medium">{application.position}</TableCell>
-                          <TableCell>{application.university}</TableCell>
-                          <TableCell>{new Date(application.appliedDate).toLocaleDateString()}</TableCell>
-                          <TableCell>{getStatusBadge(application.status)}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Dialog>
-                                <DialogTrigger asChild>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setSelectedApplication(application)}
-                                  >
-                                    <Eye className="h-4 w-4 mr-1" />
-                                    View
-                                  </Button>
-                                </DialogTrigger>
-                                <DialogContent className="max-w-2xl">
-                                  <DialogHeader>
-                                    <DialogTitle className="font-sans">Application Details</DialogTitle>
-                                    <DialogDescription>
-                                      Review the complete application from {selectedApplication?.applicantName}
-                                    </DialogDescription>
-                                  </DialogHeader>
-                                  {selectedApplication && (
-                                    <div className="space-y-4">
-                                      <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                          <div className="flex items-center gap-2">
-                                            <Mail className="h-4 w-4 text-muted-foreground" />
-                                            <span className="text-sm">{selectedApplication.email}</span>
+                  {proposals.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No proposals found
+                    </div>
+                  ) : (
+                    <>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Applicant</TableHead>
+                            <TableHead>Job</TableHead>
+                            <TableHead>Quote Amount</TableHead>
+                            <TableHead>Submitted Date</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {getPaginatedApplications().map((proposal) => (
+                            <TableRow key={proposal._id}>
+                              <TableCell>
+                                <div className="flex items-center gap-3">
+                                  <Avatar className="h-8 w-8">
+                                    <AvatarImage src={proposal.studentId.avatar || "/placeholder.svg"} />
+                                    <AvatarFallback>
+                                      {proposal.studentId.name
+                                        .split(" ")
+                                        .map((n) => n[0])
+                                        .join("")}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div>
+                                    <div className="font-medium">{proposal.studentId.name}</div>
+                                    <div className="text-sm text-muted-foreground">{proposal.studentId.email}</div>
+                                  </div>
+                                </div>
+                              </TableCell>
+                              <TableCell className="font-medium">{proposal.jobId.title}</TableCell>
+                              <TableCell>${proposal.quoteAmount}</TableCell>
+                              <TableCell>{new Date(proposal.submittedAt).toLocaleDateString()}</TableCell>
+                              <TableCell>{getStatusBadge(proposal.status)}</TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <Dialog>
+                                    <DialogTrigger asChild>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setSelectedApplication(proposal)}
+                                      >
+                                        <Eye className="h-4 w-4 mr-1" />
+                                        View
+                                      </Button>
+                                    </DialogTrigger>
+                                    <DialogContent className="max-w-2xl">
+                                      <DialogHeader>
+                                        <DialogTitle>Proposal Details</DialogTitle>
+                                        <DialogDescription>
+                                          Review the complete proposal from {selectedApplication?.studentId.name}
+                                        </DialogDescription>
+                                      </DialogHeader>
+                                      {selectedApplication && (
+                                        <div className="space-y-4">
+                                          <div className="grid grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                              <div className="flex items-center gap-2">
+                                                <Mail className="h-4 w-4 text-muted-foreground" />
+                                                <span className="text-sm">{selectedApplication.studentId.email}</span>
+                                              </div>
+                                            </div>
                                           </div>
-                                          <div className="flex items-center gap-2">
-                                            <Phone className="h-4 w-4 text-muted-foreground" />
-                                            <span className="text-sm">{selectedApplication.phone}</span>
-                                          </div>
-                                          <div className="flex items-center gap-2">
-                                            <GraduationCap className="h-4 w-4 text-muted-foreground" />
-                                            <span className="text-sm">
-                                              {selectedApplication.university} (GPA: {selectedApplication.gpa})
-                                            </span>
-                                          </div>
-                                        </div>
-                                        <div className="space-y-2">
                                           <div>
-                                            <h4 className="font-medium mb-1">Skills</h4>
-                                            <div className="flex flex-wrap gap-1">
-                                              {selectedApplication.skills.map((skill) => (
-                                                <Badge key={skill} variant="secondary" className="text-xs">
-                                                  {skill}
-                                                </Badge>
+                                            <h4 className="font-medium mb-2">Cover Letter</h4>
+                                            <p className="text-sm text-muted-foreground leading-relaxed">
+                                              {selectedApplication.coverLetter}
+                                            </p>
+                                          </div>
+                                          <div>
+                                            <h4 className="font-medium mb-2">Milestones</h4>
+                                            <div className="space-y-2">
+                                              {selectedApplication.milestones.map((milestone, index) => (
+                                                <div key={index} className="flex justify-between text-sm">
+                                                  <span>{milestone.title}</span>
+                                                  <span>${milestone.amount}</span>
+                                                </div>
                                               ))}
                                             </div>
                                           </div>
                                         </div>
-                                      </div>
-                                      <div>
-                                        <h4 className="font-medium mb-2">Cover Letter</h4>
-                                        <p className="text-sm text-muted-foreground leading-relaxed">
-                                          {selectedApplication.coverLetter}
-                                        </p>
-                                      </div>
-                                    </div>
+                                      )}
+                                    </DialogContent>
+                                  </Dialog>
+                                  {proposal.status === "pending" && (
+                                    <>
+                                      <Button
+                                        size="sm"
+                                        onClick={() => handleStatusChange(proposal._id, "accepted")}
+                                        className="bg-green-600 hover:bg-green-700"
+                                      >
+                                        <CheckCircle className="h-4 w-4 mr-1" />
+                                        Accept
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="destructive"
+                                        onClick={() => handleStatusChange(proposal._id, "declined")}
+                                      >
+                                        <XCircle className="h-4 w-4 mr-1" />
+                                        Decline
+                                      </Button>
+                                    </>
                                   )}
-                                </DialogContent>
-                              </Dialog>
-                              {application.status === "pending" && (
-                                <>
-                                  <Button
-                                    size="sm"
-                                    onClick={() => handleStatusChange(application.id, "accepted")}
-                                    className="bg-green-600 hover:bg-green-700"
-                                  >
-                                    <CheckCircle className="h-4 w-4 mr-1" />
-                                    Accept
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="destructive"
-                                    onClick={() => handleStatusChange(application.id, "declined")}
-                                  >
-                                    <XCircle className="h-4 w-4 mr-1" />
-                                    Decline
-                                  </Button>
-                                </>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  <PaginationControls
-                    currentPage={applicationsPage}
-                    totalPages={getTotalApplicationsPages()}
-                    onPageChange={setApplicationsPage}
-                  />
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                      <PaginationControls
+                        currentPage={applicationsPage}
+                        totalPages={getTotalApplicationsPages()}
+                        onPageChange={setApplicationsPage}
+                      />
+                    </>
+                  )}
                 </CardContent>
               </Card>
-            </>
-          )}
+            </TabsContent>
 
-          {activeTab === "jobposts" && (
-            <>
-              <div className="mb-6 flex items-center justify-between">
+            <TabsContent value="jobs" className="space-y-6">
+              <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-2xl font-sans font-bold text-foreground mb-2">Job Posts</h2>
+                  <h2 className="text-2xl font-bold mb-2">Job Posts</h2>
                   <p className="text-muted-foreground">Manage your job postings and create new opportunities</p>
                 </div>
-                <Button onClick={() => setShowJobPostForm(true)}>
+                <Button onClick={() => setShowCreateForm(true)}>
                   <Plus className="h-4 w-4 mr-2" />
                   Create Job Post
                 </Button>
               </div>
 
+              {showCreateForm && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Create New Job Post</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <CreateJobForm onJobCreated={handleJobCreated} />
+                  </CardContent>
+                </Card>
+              )}
+
               <div className="grid gap-4">
-                {getPaginatedJobPosts().map((job) => (
-                  <Card key={job.id}>
-                    <CardHeader>
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <CardTitle className="font-sans">{job.title}</CardTitle>
-                          <p className="text-sm text-muted-foreground mt-1">
-                            {job.department} • {job.location} • {job.type}
-                          </p>
-                        </div>
-                        <Badge variant={job.status === "active" ? "default" : "secondary"}>{job.status}</Badge>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-sm text-muted-foreground mb-3">{job.description}</p>
-                      <div className="flex flex-wrap gap-1 mb-3">
-                        {job.requirements.map((req) => (
-                          <Badge key={req} variant="outline" className="text-xs">
-                            {req}
-                          </Badge>
-                        ))}
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Posted on {new Date(job.postedDate).toLocaleDateString()}
-                      </p>
+                {jobs.length === 0 ? (
+                  <Card>
+                    <CardContent className="text-center py-8">
+                      <p className="text-muted-foreground">No job posts found. Create your first job post!</p>
                     </CardContent>
                   </Card>
-                ))}
+                ) : (
+                  getPaginatedJobPosts().map((job) => (
+                    <Card key={job._id}>
+                      <CardHeader>
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <CardTitle>{job.title}</CardTitle>
+                            <p className="text-sm text-muted-foreground mt-1">
+                              Budget: ${job.budgetMin} - ${job.budgetMax}
+                            </p>
+                          </div>
+                          <Badge variant={job.status === "open" ? "default" : "secondary"}>
+                            {job.status}
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-sm text-muted-foreground mb-3">{job.description}</p>
+                        <div className="flex flex-wrap gap-1 mb-3">
+                          {Array.isArray(job.skillsRequired) ? job.skillsRequired.map((skill: string, index: number) => (
+                            <Badge key={index} variant="outline" className="text-xs">
+                              {skill}
+                            </Badge>
+                          )) : null}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Posted on {new Date(job.createdAt).toLocaleDateString()}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
               </div>
 
-              <PaginationControls
-                currentPage={jobPostsPage}
-                totalPages={getTotalJobPostsPages()}
-                onPageChange={setJobPostsPage}
-              />
+              {jobs.length > 0 && (
+                <PaginationControls
+                  currentPage={jobPostsPage}
+                  totalPages={getTotalJobPostsPages()}
+                  onPageChange={setJobPostsPage}
+                />
+              )}
+            </TabsContent>
 
-              {/* Job Post Creation Dialog */}
-              <Dialog open={showJobPostForm} onOpenChange={setShowJobPostForm}>
-                <DialogContent className="max-w-2xl">
-                  <DialogHeader>
-                    <DialogTitle className="font-sans">Create New Job Post</DialogTitle>
-                    <DialogDescription>Fill out the details for your new job posting</DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="title">Job Title</Label>
-                        <Input
-                          id="title"
-                          value={newJobPost.title}
-                          onChange={(e) => setNewJobPost({ ...newJobPost, title: e.target.value })}
-                          placeholder="e.g. Frontend Developer Intern"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="department">Department</Label>
-                        <Input
-                          id="department"
-                          value={newJobPost.department}
-                          onChange={(e) => setNewJobPost({ ...newJobPost, department: e.target.value })}
-                          placeholder="e.g. Engineering"
-                        />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="location">Location</Label>
-                        <Input
-                          id="location"
-                          value={newJobPost.location}
-                          onChange={(e) => setNewJobPost({ ...newJobPost, location: e.target.value })}
-                          placeholder="e.g. San Francisco, CA"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="type">Job Type</Label>
-                        <Input
-                          id="type"
-                          value={newJobPost.type}
-                          onChange={(e) => setNewJobPost({ ...newJobPost, type: e.target.value })}
-                          placeholder="e.g. Internship"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <Label htmlFor="description">Description</Label>
-                      <Textarea
-                        id="description"
-                        value={newJobPost.description}
-                        onChange={(e) => setNewJobPost({ ...newJobPost, description: e.target.value })}
-                        placeholder="Describe the role and responsibilities..."
-                        rows={3}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="requirements">Requirements (comma-separated)</Label>
-                      <Input
-                        id="requirements"
-                        value={newJobPost.requirements}
-                        onChange={(e) => setNewJobPost({ ...newJobPost, requirements: e.target.value })}
-                        placeholder="e.g. React, TypeScript, CSS, Git"
-                      />
-                    </div>
-                    <div className="flex justify-end gap-2">
-                      <Button variant="outline" onClick={() => setShowJobPostForm(false)}>
-                        Cancel
-                      </Button>
-                      <Button onClick={handleCreateJobPost}>Create Job Post</Button>
-                    </div>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </>
-          )}
-
-          {activeTab === "chat" && (
-            <>
-              <div className="mb-6">
-                <h2 className="text-2xl font-sans font-bold text-foreground mb-2">Chat with Accepted Candidates</h2>
+            <TabsContent value="chat" className="space-y-6">
+              <div>
+                <h2 className="text-2xl font-bold mb-2">Chat with Accepted Candidates</h2>
                 <p className="text-muted-foreground">Communicate with students who have been accepted for positions</p>
               </div>
 
@@ -751,36 +698,41 @@ export default function BusinessDashboard() {
                 {/* Chat List */}
                 <Card className="lg:col-span-1">
                   <CardHeader>
-                    <CardTitle className="font-sans text-lg">Accepted Candidates</CardTitle>
+                    <CardTitle>Accepted Candidates</CardTitle>
                   </CardHeader>
                   <CardContent className="p-0">
-                    <div className="space-y-1">
-                      {getAcceptedApplications().map((app) => (
-                        <div
-                          key={app.id}
-                          className={`p-3 cursor-pointer hover:bg-muted/50 border-b ${
-                            selectedChat === app.id ? "bg-muted" : ""
-                          }`}
-                          onClick={() => setSelectedChat(app.id)}
-                        >
-                          <div className="flex items-center gap-3">
-                            <Avatar className="h-8 w-8">
-                              <AvatarImage src={app.avatar || "/placeholder.svg"} />
-                              <AvatarFallback>
-                                {app.applicantName
-                                  .split(" ")
-                                  .map((n) => n[0])
-                                  .join("")}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium text-sm truncate">{app.applicantName}</p>
-                              <p className="text-xs text-muted-foreground truncate">{app.position}</p>
+                    {getAcceptedApplications().length === 0 ? (
+                      <div className="p-4 text-center text-muted-foreground">
+                        No accepted candidates
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        {getAcceptedApplications().map((app) => (
+                          <div
+                            key={app._id}
+                            className={`p-3 cursor-pointer hover:bg-muted/50 border-b ${selectedChat === app._id ? "bg-muted" : ""
+                              }`}
+                            onClick={() => setSelectedChat(app._id)}
+                          >
+                            <div className="flex items-center gap-3">
+                              <Avatar className="h-8 w-8">
+                                <AvatarImage src={app.studentId.avatar || "/placeholder.svg"} />
+                                <AvatarFallback>
+                                  {app.studentId.name
+                                    .split(" ")
+                                    .map((n) => n[0])
+                                    .join("")}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-sm truncate">{app.studentId.name}</p>
+                                <p className="text-xs text-muted-foreground truncate">{app.jobId.title}</p>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
+                        ))}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -789,8 +741,8 @@ export default function BusinessDashboard() {
                   {selectedChat ? (
                     <>
                       <CardHeader className="border-b">
-                        <CardTitle className="font-sans text-lg">
-                          {applications.find((app) => app.id === selectedChat)?.applicantName}
+                        <CardTitle>
+                          {proposals.find((app) => app._id === selectedChat)?.studentId.name}
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="p-0 flex flex-col h-[500px]">
@@ -804,9 +756,8 @@ export default function BusinessDashboard() {
                                   className={`flex ${message.isFromBusiness ? "justify-end" : "justify-start"}`}
                                 >
                                   <div
-                                    className={`max-w-[70%] p-3 rounded-lg ${
-                                      message.isFromBusiness ? "bg-primary text-primary-foreground" : "bg-muted"
-                                    }`}
+                                    className={`max-w-[70%] p-3 rounded-lg ${message.isFromBusiness ? "bg-primary text-primary-foreground" : "bg-muted"
+                                      }`}
                                   >
                                     <p className="text-sm">{message.message}</p>
                                     <p className="text-xs opacity-70 mt-1">
@@ -842,10 +793,10 @@ export default function BusinessDashboard() {
                   )}
                 </Card>
               </div>
-            </>
-          )}
+            </TabsContent>
+          </Tabs>
         </main>
       </div>
     </div>
-  )
+  );
 }

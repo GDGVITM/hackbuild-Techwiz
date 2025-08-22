@@ -1,40 +1,111 @@
-// src/app/api/proposals/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
+import { getUserFromRequest, createUnauthorizedResponse, createForbiddenResponse } from '@/lib/utils/auth';
 import Proposal from '@/lib/models/Proposal';
 import Job from '@/lib/models/Job';
-import { verifyToken } from '@/lib/auth/jwt';
+import dbConnect from '@/lib/db/mongoose';
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
-    const token = request.headers.get('Authorization')?.replace('Bearer ', '');
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const user = getUserFromRequest(request);
+    if (!user) {
+      return createUnauthorizedResponse('Authentication required');
     }
 
-    const { userId } = verifyToken(token);
-    const { status } = await request.json();
+    await dbConnect();
+    const proposalId = params.id;
 
-    const proposal = await Proposal.findById(params.id);
+    const proposal = await Proposal.findById(proposalId)
+      .populate('jobId', 'title description createdBy')
+      .populate('studentId', 'name email');
+
     if (!proposal) {
       return NextResponse.json({ error: 'Proposal not found' }, { status: 404 });
     }
 
-    // Check if the user is the business owner of the job
-    const job = await Job.findById(proposal.jobId);
-    if (!job || job.businessId.toString() !== userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+    // Check if user has permission to view this proposal
+    const job = await Job.findById(proposal.jobId._id);
+    if (!job) {
+      return NextResponse.json({ error: 'Job not found' }, { status: 404 });
     }
 
-    proposal.status = status;
-    await proposal.save();
-
-    // If proposal is accepted, create a contract
-    if (status === 'accepted') {
-      // Contract creation logic will be implemented in the next step
+    // Allow access if user is the student who submitted the proposal or the business owner
+    if (proposal.studentId._id !== user.userId && job.businessId.toString() !== user.userId) {
+      return createForbiddenResponse('Unauthorized to view this proposal');
     }
 
     return NextResponse.json({ proposal });
   } catch (error) {
+    return NextResponse.json({ error: 'Failed to fetch proposal' }, { status: 500 });
+  }
+}
+
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const user = getUserFromRequest(request);
+    if (!user) {
+      return createUnauthorizedResponse('Authentication required');
+    }
+
+    await dbConnect();
+    const proposalId = params.id;
+    const { status, reason } = await request.json();
+
+    const proposal = await Proposal.findById(proposalId);
+    if (!proposal) {
+      return NextResponse.json({ error: 'Proposal not found' }, { status: 404 });
+    }
+
+    // Check if user is the business owner of the job
+    const job = await Job.findById(proposal.jobId);
+    if (!job || job.businessId.toString() !== user.userId) {
+      return createForbiddenResponse('Unauthorized to update this proposal');
+    }
+
+    // Validate status
+    if (!['accepted', 'rejected', 'withdrawn'].includes(status)) {
+      return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
+    }
+
+    // Update proposal status
+    proposal.status = status;
+
+    // Add to status history
+    if (!proposal.statusHistory) {
+      proposal.statusHistory = [];
+    }
+
+    proposal.statusHistory.push({
+      status: status,
+      changedAt: new Date(),
+      changedBy: user.userId,
+      reason: reason || `Status changed to ${status}`
+    });
+
+    await proposal.save();
+
+    // If proposal is accepted, close the job
+    if (status === 'accepted') {
+      job.status = 'closed';
+      await job.save();
+    }
+
+    // Return populated proposal
+    const updatedProposal = await Proposal.findById(proposalId)
+      .populate('jobId', 'title description createdBy')
+      .populate('studentId', 'name email');
+
+    return NextResponse.json({
+      proposal: updatedProposal,
+      message: `Proposal status updated to ${status}`
+    });
+  } catch (error) {
+    console.error('Failed to update proposal:', error);
     return NextResponse.json({ error: 'Failed to update proposal' }, { status: 500 });
   }
 }

@@ -1,8 +1,9 @@
 "use client"
 import { JobList } from "@/components/jobs/job-list"
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 
-// Define the Job interface in this file or import it from a shared types file
+// Define the Job interface
 interface Job {
   _id: string
   businessId: string
@@ -22,6 +23,7 @@ interface Job {
 }
 
 export default function HomePage() {
+  const router = useRouter();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -29,13 +31,11 @@ export default function HomePage() {
   useEffect(() => {
     const fetchJobs = async () => {
       try {
-        const response = await fetch('/api/jobs', {
-          credentials: 'include'
-        });
+        const response = await fetch('/api/jobs');
         const data = await response.json();
-        
+
         if (response.ok) {
-          // Transform the data to match the Job interface if needed
+          // Transform jobs to match interface
           const transformedJobs = data.jobs.map((job: any) => ({
             ...job,
             budgetMin: job.budgetMin || job.budget,
@@ -47,10 +47,6 @@ export default function HomePage() {
             updatedAt: new Date(job.updatedAt)
           }));
           setJobs(transformedJobs);
-        } else if (response.status === 401) {
-          setError('Authentication required. Please log in again.');
-        } else if (response.status === 403) {
-          setError('You do not have permission to view jobs.');
         } else {
           setError(data.error || 'Failed to fetch jobs');
         }
@@ -61,19 +57,21 @@ export default function HomePage() {
         setLoading(false);
       }
     };
-    
+
     fetchJobs();
   }, []);
 
+  // 🔹 Apply requires login
   const handleApply = (jobId: string) => {
-    console.log("Apply to job:", jobId)
-    // Handle job application logic
-  }
+    // Check if user is authenticated by trying to access a protected endpoint
+    // The middleware will handle the redirect if not authenticated
+    router.push(`/jobs/${jobId}/apply`);
+  };
 
+  // 🔹 View details is always public
   const handleViewDetails = (jobId: string) => {
-    console.log("View job details:", jobId)
-    // Handle view details logic
-  }
+    router.push(`/jobs/${jobId}`);
+  };
 
   if (loading) {
     return <div className="text-center py-10">Loading jobs...</div>;
@@ -84,8 +82,8 @@ export default function HomePage() {
       <div className="container mx-auto px-4 py-8">
         <div className="text-center py-10 text-red-600">
           <p>{error}</p>
-          <button 
-            onClick={() => window.location.reload()} 
+          <button
+            onClick={() => window.location.reload()}
             className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
           >
             Retry

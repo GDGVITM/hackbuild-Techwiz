@@ -1,47 +1,114 @@
-// src/app/(dashboard)/student/jobs/[id]/page.tsx
 'use client';
-
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import ProposalForm from '@/components/student/ProposalForm';
 import { Job } from '@/types/job';
 import { useAuth } from '@/context/AuthContext';
+import ProtectedRoute from '@/components/auth/ProtectedRoute';
 
-export default function JobDetailsPage() {
+function JobDetailsPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const jobId = params.id as string;
+  const action = searchParams.get('action');
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
-  const [showProposalForm, setShowProposalForm] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [hasApplied, setHasApplied] = useState(false);
+  const [proposalStatus, setProposalStatus] = useState<string | null>(null);
   const { user } = useAuth();
 
   useEffect(() => {
-    const fetchJob = async () => {
+    const fetchJobAndProposalStatus = async () => {
       try {
-        const response = await fetch(`/api/jobs/${jobId}`);
-        const data = await response.json();
-        setJob(data.job);
+        setLoading(true);
+        setError(null);
+        
+        // Fetch job details
+        const jobResponse = await fetch(`/api/jobs/${jobId}`, {
+          credentials: 'include'
+        });
+        
+        if (!jobResponse.ok) {
+          const errorData = await jobResponse.json().catch(() => ({ error: 'Unknown error' }));
+          throw new Error(errorData.error || `HTTP error! status: ${jobResponse.status}`);
+        }
+        
+        const jobData = await jobResponse.json();
+        setJob(jobData.job);
+        
+        // Check if student has already applied
+        if (user?.role === 'student') {
+          const proposalsResponse = await fetch('/api/proposals', {
+            credentials: 'include'
+          });
+          
+          if (proposalsResponse.ok) {
+            const proposalsData = await proposalsResponse.json();
+            const userProposal = proposalsData.proposals?.find(
+              (p: any) => p.jobId === jobId
+            );
+            
+            if (userProposal) {
+              setHasApplied(true);
+              setProposalStatus(userProposal.status);
+            }
+          }
+        }
       } catch (error) {
         console.error('Failed to fetch job:', error);
+        setError(error instanceof Error ? error.message : 'Failed to fetch job');
       } finally {
         setLoading(false);
       }
     };
 
-    fetchJob();
-  }, [jobId]);
+    fetchJobAndProposalStatus();
+  }, [jobId, user]);
 
-  if (loading) return <div>Loading job details...</div>;
-  if (!job) return <div>Job not found</div>;
+  if (loading) return <div className="text-center py-10">Loading job details...</div>;
+  if (error) return <div className="text-center py-10 text-red-600">{error}</div>;
+  if (!job) return <div className="text-center py-10">Job not found</div>;
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h1 className="text-2xl font-bold mb-4">{job.title}</h1>
-        <p className="text-gray-700 mb-4">{job.description}</p>
+      <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+        <div className="flex justify-between items-start mb-6">
+          <div>
+            <h1 className="text-2xl font-bold mb-2">{job.title}</h1>
+            <div className="flex items-center gap-2">
+              <span className="text-green-600 font-medium">
+                ${job.budgetMin} - ${job.budgetMax}
+              </span>
+              {hasApplied && (
+                <span className={`px-2 py-1 rounded-full text-xs ${
+                  proposalStatus === 'accepted' ? 'bg-green-100 text-green-800' :
+                  proposalStatus === 'rejected' ? 'bg-red-100 text-red-800' :
+                  'bg-yellow-100 text-yellow-800'
+                }`}>
+                  {proposalStatus === 'accepted' ? 'Accepted' :
+                   proposalStatus === 'rejected' ? 'Rejected' : 'Pending'}
+                </span>
+              )}
+            </div>
+          </div>
+          
+          {user?.role === 'student' && !hasApplied && (
+            <Button onClick={() => {
+              const element = document.getElementById('proposal-form');
+              if (element) {
+                element.scrollIntoView({ behavior: 'smooth' });
+              }
+            }}>
+              Submit Proposal
+            </Button>
+          )}
+        </div>
         
-        <div className="mb-4">
+        <p className="text-gray-700 mb-6">{job.description}</p>
+        
+        <div className="mb-6">
           <h2 className="text-lg font-semibold mb-2">Skills Required</h2>
           <div className="flex flex-wrap gap-2">
             {job.skillsRequired.map((skill, index) => (
@@ -50,11 +117,6 @@ export default function JobDetailsPage() {
               </span>
             ))}
           </div>
-        </div>
-        
-        <div className="mb-4">
-          <h2 className="text-lg font-semibold mb-2">Budget</h2>
-          <p className="text-green-600 font-medium">${job.budgetMin} - ${job.budgetMax}</p>
         </div>
         
         <div className="mb-6">
@@ -68,31 +130,29 @@ export default function JobDetailsPage() {
             ))}
           </ul>
         </div>
-        
-        {user?.role === 'student' && (
-          <div className="mt-8">
-            {!showProposalForm ? (
-              <Button onClick={() => setShowProposalForm(true)}>
-                Submit Proposal
-              </Button>
-            ) : (
-              <div>
-                <Button 
-                  variant="outline" 
-                  onClick={() => setShowProposalForm(false)}
-                  className="mb-4"
-                >
-                  Cancel
-                </Button>
-                <ProposalForm 
-                  jobId={jobId} 
-                  onProposalSubmitted={() => setShowProposalForm(false)} 
-                />
-              </div>
-            )}
-          </div>
-        )}
       </div>
+      
+      {/* Always show the proposal form for testing */}
+      {user?.role === 'student' && (
+        <div id="proposal-form" className="bg-white rounded-lg shadow-md p-6">
+          <h2 className="text-xl font-semibold mb-4">Submit Your Proposal</h2>
+          <ProposalForm 
+            jobId={jobId}
+            onProposalSubmitted={() => {
+              setHasApplied(true);
+              setProposalStatus('pending');
+            }}
+          />
+        </div>
+      )}
     </div>
+  );
+}
+
+export default function JobDetailsPageWrapper() {
+  return (
+    <ProtectedRoute allowedRoles={['student']}>
+      <JobDetailsPage />
+    </ProtectedRoute>
   );
 }

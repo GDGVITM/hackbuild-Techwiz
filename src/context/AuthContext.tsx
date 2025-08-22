@@ -24,22 +24,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const initializeAuth = async () => {
       try {
+        console.log('AuthContext - Initializing authentication...');
         // Check authentication status from server
         const response = await fetch('/api/auth/me', {
           credentials: 'include'
         });
-        
+
+        console.log('AuthContext - /api/auth/me response status:', response.status);
+
         if (response.ok) {
           const data = await response.json();
+          console.log('AuthContext - /api/auth/me response data:', data);
           if (data.authenticated && data.user) {
+            console.log('AuthContext - Setting authenticated user:', data.user);
             setUser(data.user);
             setIsAuthenticated(true);
             // Note: Token is not accessible on client-side for security
+          } else {
+            console.log('AuthContext - User not authenticated from server');
           }
+        } else {
+          console.log('AuthContext - /api/auth/me failed with status:', response.status);
         }
       } catch (error) {
-        console.error('Error initializing auth:', error);
+        console.error('AuthContext - Error initializing auth:', error);
       } finally {
+        console.log('AuthContext - Setting loading to false');
         setLoading(false);
       }
     };
@@ -95,14 +105,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      token, 
-      login, 
-      logout, 
-      isAuthenticated, 
+    <AuthContext.Provider value={{
+      user,
+      token,
+      login,
+      logout,
+      isAuthenticated,
       loading,
-      refreshToken 
+      refreshToken
     }}>
       {children}
     </AuthContext.Provider>

@@ -82,8 +82,8 @@ export default function CreateJobForm({ onJobCreated }: { onJobCreated: (job: an
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
         },
+        credentials: 'include',
         body: JSON.stringify(jobData),
       });
 

@@ -1,16 +1,25 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 
 export default function Navbar() {
   const { user, logout, isAuthenticated, loading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   const handleLogout = async () => {
     await logout();
     router.push('/');
+  };
+
+  // Helper function to check if a link is active
+  const isActive = (path: string) => {
+    if (path === '/') {
+      return pathname === '/';
+    }
+    return pathname.startsWith(path);
   };
 
   if (loading) {
@@ -49,15 +58,19 @@ export default function Navbar() {
                     {user.role}
                   </span>
                 </div>
-                <Link 
-                  href={user.role === 'student' ? '/dashboard/student' : '/dashboard/business'} 
-                  className="text-gray-700 hover:text-blue-600 transition-colors"
+                <Link
+                  href={user.role === 'student' ? '/dashboard/student' : '/dashboard/business'}
+                  className={`text-gray-700 hover:text-blue-600 transition-colors ${
+                    isActive('/dashboard') ? 'text-blue-600 border-b-2 border-blue-600 pb-1' : ''
+                  }`}
                 >
                   Dashboard
                 </Link>
-                <Link 
-                  href="/explore" 
-                  className="text-gray-700 hover:text-blue-600 transition-colors"
+                <Link
+                  href="/explore"
+                  className={`text-gray-700 hover:text-blue-600 transition-colors ${
+                    isActive('/explore') ? 'text-blue-600 border-b-2 border-blue-600 pb-1' : ''
+                  }`}
                 >
                   Explore Jobs
                 </Link>
@@ -70,14 +83,16 @@ export default function Navbar() {
               </>
             ) : (
               <>
-                <Link 
-                  href="/auth/login" 
-                  className="text-gray-700 hover:text-blue-600 transition-colors"
+                <Link
+                  href="/auth/login"
+                  className={`text-gray-700 hover:text-blue-600 transition-colors ${
+                    isActive('/auth/login') ? 'text-blue-600 border-b-2 border-blue-600 pb-1' : ''
+                  }`}
                 >
                   Login
                 </Link>
-                <Link 
-                  href="/auth/register" 
+                <Link
+                  href="/auth/register"
                   className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
                 >
                   Register
