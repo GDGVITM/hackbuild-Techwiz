@@ -7,6 +7,22 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext';
 
+interface ChangeRequest {
+  _id: string;
+  message: string;
+  status: "pending" | "resolved";
+  createdAt: string;
+}
+
+interface Contract {
+  _id: string;
+  title: string;
+  content: string;
+  createdAt: string;
+  status: "draft" | "pending" | "signed" | "completed" | "changes_requested";
+  changeRequests?: ChangeRequest[];
+}
+
 interface Proposal {
   _id: string;
   jobId: {
@@ -28,7 +44,8 @@ interface Proposal {
   quoteAmount: number;
   status: 'pending' | 'accepted' | 'rejected' | 'withdrawn';
   submittedAt: string;
-  attachments: string[];
+  attachments?: string[];
+  contract?: Contract;
 }
 
 export default function ProposalDetailsPage() {
@@ -218,6 +235,73 @@ export default function ProposalDetailsPage() {
                       </span>
                     </a>
                   ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Contract Information */}
+          {proposal.contract && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Contract Details</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium">Contract Status:</span>
+                    <Badge 
+                      variant={
+                        proposal.contract.status === 'signed' ? 'default' :
+                        proposal.contract.status === 'pending' ? 'secondary' :
+                        proposal.contract.status === 'changes_requested' ? 'destructive' :
+                        'outline'
+                      }
+                      className={
+                        proposal.contract.status === 'signed' ? 'bg-green-500' :
+                        proposal.contract.status === 'changes_requested' ? 'bg-orange-500' :
+                        ''
+                      }
+                    >
+                      {proposal.contract.status.charAt(0).toUpperCase() + proposal.contract.status.slice(1).replace('_', ' ')}
+                    </Badge>
+                  </div>
+                  
+                  <div>
+                    <p className="font-medium mb-2">Contract Title:</p>
+                    <p className="text-gray-700">{proposal.contract.title}</p>
+                  </div>
+                  
+                  <div>
+                    <p className="font-medium mb-2">Created:</p>
+                    <p className="text-gray-700">
+                      {new Date(proposal.contract.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+
+                  {proposal.contract.status === 'changes_requested' && proposal.contract.changeRequests && (
+                    <div>
+                      <p className="font-medium mb-2 text-orange-600">Change Requests:</p>
+                      <div className="space-y-2">
+                        {proposal.contract.changeRequests.map((request, index) => (
+                          <div key={index} className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                            <p className="text-orange-800">{request.message}</p>
+                            <p className="text-sm text-orange-600 mt-1">
+                              Status: {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <Button 
+                    variant="outline" 
+                    className="w-full"
+                    onClick={() => router.push(`/dashboard/student/contracts/${proposal.contract?._id}`)}
+                  >
+                    View Contract Details
+                  </Button>
                 </div>
               </CardContent>
             </Card>

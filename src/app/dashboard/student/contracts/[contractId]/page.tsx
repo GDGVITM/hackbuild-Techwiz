@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Notification } from '@/components/ui/notification';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useAuth } from '@/context/AuthContext';
 
 interface ChangeRequest {
@@ -16,6 +16,18 @@ interface ChangeRequest {
   createdAt: string;
 }
 
+interface Proposal {
+  _id: string;
+  jobId: {
+    _id: string;
+    title: string;
+    businessId: {
+      _id: string;
+      name: string;
+    };
+  };
+}
+
 interface Contract {
   _id: string;
   title: string;
@@ -23,18 +35,13 @@ interface Contract {
   createdAt: string;
   status: 'draft' | 'pending' | 'signed' | 'completed' | 'changes_requested';
   changeRequests?: ChangeRequest[];
-  proposal: {
-    jobId: {
-      title: string;
-      businessId: {
-        name: string;
-      };
-    };
-  };
+  proposalId: string;
+  proposal?: Proposal; // This will be populated after we fetch it
 }
 
 export default function ContractDetailPage() {
   const [contract, setContract] = useState<Contract | null>(null);
+  const [proposal, setProposal] = useState<Proposal | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notification, setNotification] = useState<{
@@ -50,8 +57,14 @@ export default function ContractDetailPage() {
   const contractId = params.contractId as string;
   const router = useRouter();
 
+  // Fetch contract details
   useEffect(() => {
     const fetchContract = async () => {
+      if (!token || !contractId) {
+        setLoading(false);
+        return;
+      }
+      
       try {
         setLoading(true);
         const response = await fetch(`/api/contracts/${contractId}`, {
@@ -64,22 +77,59 @@ export default function ContractDetailPage() {
           if (response.status === 404) {
             throw new Error('Contract not found');
           }
-          throw new Error('Failed to fetch contract');
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to fetch contract');
         }
         
         const data = await response.json();
         setContract(data.contract);
+        setError(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'An error occurred');
+        const errorMessage = err instanceof Error ? err.message : 'An error occurred';
+        setError(errorMessage);
+        setNotification({
+          title: 'Error',
+          message: errorMessage,
+          type: 'error',
+        });
       } finally {
         setLoading(false);
       }
     };
-
-    if (token && contractId) {
-      fetchContract();
-    }
+    
+    fetchContract();
   }, [token, contractId]);
+
+  // Fetch proposal details once we have the contract
+  useEffect(() => {
+    const fetchProposal = async () => {
+      if (!contract?.proposalId || !token) return;
+      
+      try {
+        const response = await fetch(`/api/proposals/${contract.proposalId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to fetch proposal');
+        }
+        
+        const data = await response.json();
+        setProposal(data.proposal);
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to fetch proposal';
+        console.error(errorMessage);
+        // We don't set a notification for this error since it's not critical
+      }
+    };
+    
+    if (contract) {
+      fetchProposal();
+    }
+  }, [contract, token]);
 
   const handleAcceptContract = async () => {
     if (!contract) return;
@@ -93,7 +143,10 @@ export default function ContractDetailPage() {
         },
       });
       
-      if (!response.ok) throw new Error('Failed to accept contract');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to accept contract');
+      }
       
       // Refresh contract data
       const data = await response.json();
@@ -104,23 +157,14 @@ export default function ContractDetailPage() {
         message: 'You have successfully accepted the contract.',
         type: 'success',
       });
-      
-      // Auto-hide notification after 10 seconds
-      setTimeout(() => {
-        setNotification(null);
-      }, 10000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to accept contract');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to accept contract';
+      setError(errorMessage);
       setNotification({
         title: 'Error',
-        message: 'Failed to accept contract. Please try again.',
+        message: errorMessage,
         type: 'error',
       });
-      
-      // Auto-hide notification after 10 seconds
-      setTimeout(() => {
-        setNotification(null);
-      }, 10000);
     } finally {
       setActionLoading(false);
     }
@@ -140,7 +184,10 @@ export default function ContractDetailPage() {
         body: JSON.stringify({ message: changeRequestMessage }),
       });
       
-      if (!response.ok) throw new Error('Failed to request changes');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to request changes');
+      }
       
       // Close modal and reset
       setShowChangeRequestModal(false);
@@ -155,23 +202,14 @@ export default function ContractDetailPage() {
         message: 'Your change request has been sent to the business.',
         type: 'info',
       });
-      
-      // Auto-hide notification after 10 seconds
-      setTimeout(() => {
-        setNotification(null);
-      }, 10000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send change request');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to send change request';
+      setError(errorMessage);
       setNotification({
         title: 'Error',
-        message: 'Failed to send change request. Please try again.',
+        message: errorMessage,
         type: 'error',
       });
-      
-      // Auto-hide notification after 10 seconds
-      setTimeout(() => {
-        setNotification(null);
-      }, 10000);
     } finally {
       setActionLoading(false);
     }
@@ -179,14 +217,30 @@ export default function ContractDetailPage() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'draft': return <Badge variant="secondary">Draft</Badge>;
-      case 'pending': return <Badge variant="outline">Pending Signature</Badge>;
-      case 'signed': return <Badge className="bg-green-500">Signed</Badge>;
-      case 'completed': return <Badge variant="default">Completed</Badge>;
-      case 'changes_requested': return <Badge variant="destructive">Changes Requested</Badge>;
-      default: return <Badge variant="secondary">{status}</Badge>;
+      case 'draft': 
+        return <Badge variant="secondary">Draft</Badge>;
+      case 'pending': 
+        return <Badge variant="outline">Pending Signature</Badge>;
+      case 'signed': 
+        return <Badge className="bg-green-500">Signed</Badge>;
+      case 'completed': 
+        return <Badge variant="default">Completed</Badge>;
+      case 'changes_requested': 
+        return <Badge variant="destructive">Changes Requested</Badge>;
+      default: 
+        return <Badge variant="secondary">{status}</Badge>;
     }
   };
+
+  // Auto-hide notification after 10 seconds
+  useEffect(() => {
+    if (notification) {
+      const timer = setTimeout(() => {
+        setNotification(null);
+      }, 10000);
+      return () => clearTimeout(timer);
+    }
+  }, [notification]);
 
   if (loading) return (
     <div className="text-center py-8">
@@ -220,12 +274,10 @@ export default function ContractDetailPage() {
       {/* Notification */}
       {notification && (
         <div className="mb-6">
-          <Notification
-            title={notification.title}
-            message={notification.message}
-            type={notification.type}
-            onClose={() => setNotification(null)}
-          />
+          <Alert className={notification.type === 'error' ? 'border-red-500' : ''}>
+            <AlertTitle>{notification.title}</AlertTitle>
+            <AlertDescription>{notification.message}</AlertDescription>
+          </Alert>
         </div>
       )}
       
@@ -235,7 +287,7 @@ export default function ContractDetailPage() {
             <div>
               <CardTitle className="text-2xl">{contract.title}</CardTitle>
               <p className="text-gray-600 mt-1">
-                {contract.proposal.jobId.title} • {contract.proposal.jobId.businessId.name}
+                {proposal?.jobId?.title || 'Loading job title...'} • {proposal?.jobId?.businessId?.name || 'Loading company name...'}
               </p>
             </div>
             <div className="flex gap-2 items-center">
