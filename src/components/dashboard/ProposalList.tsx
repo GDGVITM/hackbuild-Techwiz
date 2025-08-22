@@ -66,7 +66,10 @@ export default function ProposalList({ jobId, status }: ProposalListProps) {
   const [sortBy, setSortBy] = useState('submittedAt');
   const [selectedProposal, setSelectedProposal] = useState<Proposal | null>(null);
   const [createContractFor, setCreateContractFor] = useState<Proposal | null>(null);
-  const { token } = useAuth();
+  // Add these state variables at the top of the component
+  const [isGeneratingContract, setIsGeneratingContract] = useState(false);
+  const [aiGeneratedTerms, setAiGeneratedTerms] = useState('');
+  const { token, user } = useAuth();
   const { toast } = useToast();
 
   // Contract form state
@@ -135,24 +138,24 @@ export default function ProposalList({ jobId, status }: ProposalListProps) {
 
   // Initialize contract form when a proposal is selected for contract creation
   useEffect(() => {
-  if (createContractFor) {
-    // Check if milestones exists, otherwise use an empty array
-    const jobMilestones = createContractFor.jobId.milestones || [];
-    
-    setContractForm({
-      title: `${createContractFor.jobId.title} Contract`,
-      description: createContractFor.jobId.description,
-      milestones: jobMilestones.map(m => ({
-        ...m,
-        dueDate: new Date(m.dueDate)
-      })),
-      totalAmount: createContractFor.quoteAmount,
-      startDate: new Date(),
-      endDate: new Date(),
-      terms: `This contract is between the business and ${createContractFor.studentId.name} for the completion of the project: ${createContractFor.jobId.title}.`
-    });
-  }
-}, [createContractFor]);
+    if (createContractFor) {
+      // Check if milestones exists, otherwise use an empty array
+      const jobMilestones = createContractFor.jobId.milestones || [];
+      
+      setContractForm({
+        title: `${createContractFor.jobId.title} Contract`,
+        description: createContractFor.jobId.description,
+        milestones: jobMilestones.map(m => ({
+          ...m,
+          dueDate: new Date(m.dueDate)
+        })),
+        totalAmount: createContractFor.quoteAmount,
+        startDate: new Date(),
+        endDate: new Date(),
+        terms: `This contract is between the business and ${createContractFor.studentId.name} for the completion of the project: ${createContractFor.jobId.title}.`
+      });
+    }
+  }, [createContractFor]);
 
   // Filter and sort proposals
   useEffect(() => {
@@ -232,90 +235,141 @@ export default function ProposalList({ jobId, status }: ProposalListProps) {
   };
 
   const handleCreateContract = async () => {
-  if (!createContractFor) return;
-  
-  try {
-    // Get the current user from the auth context
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
-    const businessId = user.id; // Adjust this based on your auth context structure
+    if (!createContractFor || !user) return;
     
-    const response = await fetch('/api/contracts', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        ...contractForm,
-        proposalId: createContractFor._id,
-        jobId: createContractFor.jobId._id,
-        businessId: businessId, // Add the business ID
-        studentId: createContractFor.studentId._id
-      }),
-    });
-    
-    // First check if the response is OK
-    if (!response.ok) {
-      // Try to get the error text
-      const errorText = await response.text();
-      console.error('Server responded with:', response.status, errorText);
+    try {
+      const response = await fetch('/api/contracts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          ...contractForm,
+          proposalId: createContractFor._id,
+          jobId: createContractFor.jobId._id,
+          businessId: user.id, // Use the user ID from auth context
+          studentId: createContractFor.studentId._id
+        }),
+      });
       
-      // Try to parse as JSON if possible, otherwise use the text
-      let errorMessage = 'Failed to create contract';
-      try {
-        const errorData = JSON.parse(errorText);
-        errorMessage = errorData.error || errorMessage;
-      } catch (e) {
-        // If parsing fails, use the raw text
-        errorMessage = errorText || errorMessage;
+      // First check if the response is OK
+      if (!response.ok) {
+        // Try to get the error text
+        const errorText = await response.text();
+        console.error('Server responded with:', response.status, errorText);
+        
+        // Try to parse as JSON if possible, otherwise use the text
+        let errorMessage = 'Failed to create contract';
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.error || errorMessage;
+        } catch (e) {
+          // If parsing fails, use the raw text
+          errorMessage = errorText || errorMessage;
+        }
+        
+        toast({
+          title: 'Failed to create contract',
+          description: errorMessage,
+          variant: 'destructive',
+        });
+        return;
       }
       
+      // If response is OK, try to parse the JSON
+      let data;
+      try {
+        data = await response.json();
+      } catch (e) {
+        console.error('Failed to parse JSON response:', await response.text());
+        toast({
+          title: 'Failed to create contract',
+          description: 'Invalid response from server',
+          variant: 'destructive',
+        });
+        return;
+      }
+      
+      // If we got here, everything is successful
+      toast({
+        title: 'Contract created successfully',
+        description: 'The contract has been sent to the student for review.',
+      });
+      setCreateContractFor(null);
+      fetchProposals();
+    } catch (error) {
+      console.error('Error creating contract:', error);
       toast({
         title: 'Failed to create contract',
-        description: errorMessage,
+        description: error instanceof Error ? error.message : 'Failed to create contract.',
         variant: 'destructive',
       });
-      return;
     }
+  };
+
+  // Add the AI generation function
+  const handleGenerateContractWithAI = async () => {
+    if (!createContractFor || !user) return;
     
-    // If response is OK, try to parse the JSON
-    let data;
+    setIsGeneratingContract(true);
+    
     try {
-      data = await response.json();
-    } catch (e) {
-      console.error('Failed to parse JSON response:', await response.text());
+      const response = await fetch('/api/ai/generate-contract', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          jobTitle: createContractFor.jobId.title,
+          jobDescription: createContractFor.jobId.description,
+          studentName: createContractFor.studentId.name,
+          businessName: user.name,
+          milestones: contractForm.milestones,
+          totalAmount: contractForm.totalAmount,
+          startDate: contractForm.startDate.toISOString().split('T')[0],
+          endDate: contractForm.endDate.toISOString().split('T')[0],
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to generate contract');
+      }
+      
+      const data = await response.json();
+      setAiGeneratedTerms(data.contract);
+      
+      // Update the contract form with the generated terms
+      setContractForm({
+        ...contractForm,
+        terms: data.contract
+      });
+      
       toast({
-        title: 'Failed to create contract',
-        description: 'Invalid response from server',
+        title: 'Contract generated successfully',
+        description: 'Review the generated contract and make any necessary adjustments.',
+      });
+    } catch (error) {
+      console.error('Error generating contract:', error);
+      toast({
+        title: 'Failed to generate contract',
+        description: error instanceof Error ? error.message : 'Failed to generate contract.',
         variant: 'destructive',
       });
-      return;
+    } finally {
+      setIsGeneratingContract(false);
     }
-    
-    // If we got here, everything is successful
-    toast({
-      title: 'Contract created successfully',
-      description: 'The contract has been sent to the student for review.',
-    });
-    setCreateContractFor(null);
-    fetchProposals();
-  } catch (error) {
-    console.error('Error creating contract:', error);
-    toast({
-      title: 'Failed to create contract',
-      description: error instanceof Error ? error.message : 'Failed to create contract.',
-      variant: 'destructive',
-    });
-  }
-};
+  };
 
   const updateMilestone = (index: number, field: keyof Milestone, value: any) => {
-  const newMilestones = [...contractForm.milestones];
-  if (newMilestones[index]) {
-    newMilestones[index] = { ...newMilestones[index], [field]: value };
-    setContractForm({ ...contractForm, milestones: newMilestones });
-  }
-};
+    const newMilestones = [...contractForm.milestones];
+    if (newMilestones[index]) {
+      newMilestones[index] = { ...newMilestones[index], [field]: value };
+      setContractForm({ ...contractForm, milestones: newMilestones });
+    }
+  };
 
   if (loading) {
     return (
@@ -542,6 +596,7 @@ export default function ProposalList({ jobId, status }: ProposalListProps) {
         </div>
       )}
 
+      
       {/* Create Contract Dialog */}
       {createContractFor && (
         <Dialog open={!!createContractFor} onOpenChange={() => setCreateContractFor(null)}>
@@ -554,6 +609,23 @@ export default function ProposalList({ jobId, status }: ProposalListProps) {
             </DialogHeader>
             
             <div className="space-y-4">
+              {/* Add AI Generation Option */}
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-medium text-blue-800">Generate Contract with AI</h3>
+                    <p className="text-sm text-blue-600">Save time by generating a professional contract draft</p>
+                  </div>
+                  <Button 
+                    onClick={handleGenerateContractWithAI}
+                    disabled={isGeneratingContract}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    {isGeneratingContract ? 'Generating...' : 'Generate with AI'}
+                  </Button>
+                </div>
+              </div>
+              
               <div>
                 <Label htmlFor="title">Contract Title</Label>
                 <Input
@@ -672,8 +744,14 @@ export default function ProposalList({ jobId, status }: ProposalListProps) {
                   id="terms"
                   value={contractForm.terms}
                   onChange={(e) => setContractForm({...contractForm, terms: e.target.value})}
-                  rows={6}
+                  rows={10}
+                  placeholder={aiGeneratedTerms ? "Review and edit the AI-generated terms below" : "Enter contract terms and conditions"}
                 />
+                {aiGeneratedTerms && (
+                  <div className="mt-2 text-sm text-gray-500">
+                    AI-generated contract provided. Please review and edit as needed.
+                  </div>
+                )}
               </div>
               
               <div className="flex justify-end gap-2">
