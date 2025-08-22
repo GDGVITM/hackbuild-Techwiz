@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Calendar, DollarSign, Clock, Users, ArrowLeft, Edit, Eye } from 'lucide-react';
 import { Job } from '@/types/job';
-import ProposalList from '@/components/business/ProposalList';
+import ProposalList from '@/components/dashboard/ProposalList';
 
 export default function BusinessJobDetailsPage() {
   const params = useParams();

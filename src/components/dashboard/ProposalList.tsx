@@ -1,5 +1,4 @@
 'use client';
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,6 +6,12 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { CalendarIcon } from 'lucide-react';
+import { format } from 'date-fns';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 
@@ -15,6 +20,14 @@ interface Proposal {
   jobId: {
     _id: string;
     title: string;
+    description: string;
+    budgetMin: number;
+    budgetMax: number;
+    milestones: Array<{
+      title: string;
+      amount: number;
+      dueDate: string;
+    }>;
   };
   studentId: {
     _id: string;
@@ -37,6 +50,13 @@ interface ProposalListProps {
   status?: string;
 }
 
+interface Milestone {
+  title: string;
+  description: string;
+  amount: number;
+  dueDate: Date;
+}
+
 export default function ProposalList({ jobId, status }: ProposalListProps) {
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [filteredProposals, setFilteredProposals] = useState<Proposal[]>([]);
@@ -45,8 +65,20 @@ export default function ProposalList({ jobId, status }: ProposalListProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('submittedAt');
   const [selectedProposal, setSelectedProposal] = useState<Proposal | null>(null);
+  const [createContractFor, setCreateContractFor] = useState<Proposal | null>(null);
   const { token } = useAuth();
   const { toast } = useToast();
+
+  // Contract form state
+  const [contractForm, setContractForm] = useState({
+    title: '',
+    description: '',
+    milestones: [] as Milestone[],
+    totalAmount: 0,
+    startDate: new Date(),
+    endDate: new Date(),
+    terms: ''
+  });
 
   const fetchProposals = async () => {
     try {
@@ -97,15 +129,35 @@ export default function ProposalList({ jobId, status }: ProposalListProps) {
       const interval = setInterval(() => {
         fetchProposals();
       }, 30000); // 30 seconds
-
       return () => clearInterval(interval);
     }
   }, [token, jobId, status]);
 
+  // Initialize contract form when a proposal is selected for contract creation
+  useEffect(() => {
+  if (createContractFor) {
+    // Check if milestones exists, otherwise use an empty array
+    const jobMilestones = createContractFor.jobId.milestones || [];
+    
+    setContractForm({
+      title: `${createContractFor.jobId.title} Contract`,
+      description: createContractFor.jobId.description,
+      milestones: jobMilestones.map(m => ({
+        ...m,
+        dueDate: new Date(m.dueDate)
+      })),
+      totalAmount: createContractFor.quoteAmount,
+      startDate: new Date(),
+      endDate: new Date(),
+      terms: `This contract is between the business and ${createContractFor.studentId.name} for the completion of the project: ${createContractFor.jobId.title}.`
+    });
+  }
+}, [createContractFor]);
+
   // Filter and sort proposals
   useEffect(() => {
     let filtered = proposals;
-
+    
     // Filter by search term
     if (searchTerm) {
       filtered = filtered.filter(proposal =>
@@ -114,7 +166,7 @@ export default function ProposalList({ jobId, status }: ProposalListProps) {
         proposal.coverLetter.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
-
+    
     // Sort proposals
     filtered.sort((a, b) => {
       switch (sortBy) {
@@ -130,7 +182,7 @@ export default function ProposalList({ jobId, status }: ProposalListProps) {
           return 0;
       }
     });
-
+    
     setFilteredProposals(filtered);
   }, [proposals, searchTerm, sortBy]);
 
@@ -152,7 +204,7 @@ export default function ProposalList({ jobId, status }: ProposalListProps) {
         },
         body: JSON.stringify({ status: newStatus }),
       });
-
+      
       if (response.ok) {
         // Refresh the proposals list
         await fetchProposals();
@@ -178,6 +230,92 @@ export default function ProposalList({ jobId, status }: ProposalListProps) {
       });
     }
   };
+
+  const handleCreateContract = async () => {
+  if (!createContractFor) return;
+  
+  try {
+    // Get the current user from the auth context
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    const businessId = user.id; // Adjust this based on your auth context structure
+    
+    const response = await fetch('/api/contracts', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        ...contractForm,
+        proposalId: createContractFor._id,
+        jobId: createContractFor.jobId._id,
+        businessId: businessId, // Add the business ID
+        studentId: createContractFor.studentId._id
+      }),
+    });
+    
+    // First check if the response is OK
+    if (!response.ok) {
+      // Try to get the error text
+      const errorText = await response.text();
+      console.error('Server responded with:', response.status, errorText);
+      
+      // Try to parse as JSON if possible, otherwise use the text
+      let errorMessage = 'Failed to create contract';
+      try {
+        const errorData = JSON.parse(errorText);
+        errorMessage = errorData.error || errorMessage;
+      } catch (e) {
+        // If parsing fails, use the raw text
+        errorMessage = errorText || errorMessage;
+      }
+      
+      toast({
+        title: 'Failed to create contract',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    // If response is OK, try to parse the JSON
+    let data;
+    try {
+      data = await response.json();
+    } catch (e) {
+      console.error('Failed to parse JSON response:', await response.text());
+      toast({
+        title: 'Failed to create contract',
+        description: 'Invalid response from server',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    // If we got here, everything is successful
+    toast({
+      title: 'Contract created successfully',
+      description: 'The contract has been sent to the student for review.',
+    });
+    setCreateContractFor(null);
+    fetchProposals();
+  } catch (error) {
+    console.error('Error creating contract:', error);
+    toast({
+      title: 'Failed to create contract',
+      description: error instanceof Error ? error.message : 'Failed to create contract.',
+      variant: 'destructive',
+    });
+  }
+};
+
+  const updateMilestone = (index: number, field: keyof Milestone, value: any) => {
+  const newMilestones = [...contractForm.milestones];
+  if (newMilestones[index]) {
+    newMilestones[index] = { ...newMilestones[index], [field]: value };
+    setContractForm({ ...contractForm, milestones: newMilestones });
+  }
+};
 
   if (loading) {
     return (
@@ -386,12 +524,169 @@ export default function ProposalList({ jobId, status }: ProposalListProps) {
                         </Button>
                       </div>
                     )}
+                    
+                    {proposal.status === 'accepted' && (
+                      <Button 
+                        size="sm"
+                        onClick={() => setCreateContractFor(proposal)}
+                        className="bg-blue-600 hover:bg-blue-700"
+                      >
+                        Create Contract
+                      </Button>
+                    )}
                   </div>
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
+      )}
+
+      {/* Create Contract Dialog */}
+      {createContractFor && (
+        <Dialog open={!!createContractFor} onOpenChange={() => setCreateContractFor(null)}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Create Contract</DialogTitle>
+              <DialogDescription>
+                Create a contract for {createContractFor.studentId.name} for the project: {createContractFor.jobId.title}
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="title">Contract Title</Label>
+                <Input
+                  id="title"
+                  value={contractForm.title}
+                  onChange={(e) => setContractForm({...contractForm, title: e.target.value})}
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
+                  value={contractForm.description}
+                  onChange={(e) => setContractForm({...contractForm, description: e.target.value})}
+                  rows={3}
+                />
+              </div>
+              
+              <div>
+                <Label>Milestones</Label>
+                {contractForm.milestones.map((milestone, index) => (
+                  <div key={index} className="border p-3 rounded mb-2">
+                    <Input
+                      placeholder="Milestone title"
+                      value={milestone.title}
+                      onChange={(e) => updateMilestone(index, 'title', e.target.value)}
+                    />
+                    <Textarea
+                      placeholder="Milestone description"
+                      value={milestone.description}
+                      onChange={(e) => updateMilestone(index, 'description', e.target.value)}
+                      className="my-2"
+                    />
+                    <div className="flex gap-2">
+                      <Input
+                        type="number"
+                        placeholder="Amount"
+                        value={milestone.amount}
+                        onChange={(e) => updateMilestone(index, 'amount', Number(e.target.value))}
+                      />
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="w-[240px] justify-start text-left font-normal">
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {milestone.dueDate ? format(milestone.dueDate, 'PPP') : 'Pick a date'}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <Calendar
+                            mode="single"
+                            selected={milestone.dueDate}
+                            onSelect={(date) => updateMilestone(index, 'dueDate', date)}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Total Amount</Label>
+                  <Input
+                    type="number"
+                    value={contractForm.totalAmount}
+                    onChange={(e) => setContractForm({...contractForm, totalAmount: Number(e.target.value)})}
+                  />
+                </div>
+                <div>
+                  <Label>Start Date</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-start text-left font-normal">
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {contractForm.startDate ? format(contractForm.startDate, 'PPP') : 'Pick a date'}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <Calendar
+                        mode="single"
+                        selected={contractForm.startDate}
+                        onSelect={(date) => setContractForm({...contractForm, startDate: date || new Date()})}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </div>
+              
+              <div>
+                <Label>End Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full justify-start text-left font-normal">
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {contractForm.endDate ? format(contractForm.endDate, 'PPP') : 'Pick a date'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <Calendar
+                      mode="single"
+                      selected={contractForm.endDate}
+                      onSelect={(date) => setContractForm({...contractForm, endDate: date || new Date()})}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+              
+              <div>
+                <Label htmlFor="terms">Terms and Conditions</Label>
+                <Textarea
+                  id="terms"
+                  value={contractForm.terms}
+                  onChange={(e) => setContractForm({...contractForm, terms: e.target.value})}
+                  rows={6}
+                />
+              </div>
+              
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setCreateContractFor(null)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleCreateContract}>
+                  Create Contract
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );
