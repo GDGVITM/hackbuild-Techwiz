@@ -1,16 +1,20 @@
+// src/app/(dashboard)/student/jobs/[id]/page.tsx
 'use client';
 
-import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import ProposalForm from '@/components/student/ProposalForm';
 import { Job } from '@/types/job';
-import Proposal from '@/lib/models/Proposal';
-
+import { useAuth } from '@/context/AuthContext';
 
 export default function JobDetailsPage() {
   const params = useParams();
   const jobId = params.id as string;
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showProposalForm, setShowProposalForm] = useState(false);
+  const { user } = useAuth();
 
   useEffect(() => {
     const fetchJob = async () => {
@@ -65,10 +69,29 @@ export default function JobDetailsPage() {
           </ul>
         </div>
         
-        <div className="mt-8">
-          <h2 className="text-xl font-semibold mb-4">Submit Proposal</h2>
-          <ProposalForm jobId={jobId} />
-        </div>
+        {user?.role === 'student' && (
+          <div className="mt-8">
+            {!showProposalForm ? (
+              <Button onClick={() => setShowProposalForm(true)}>
+                Submit Proposal
+              </Button>
+            ) : (
+              <div>
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowProposalForm(false)}
+                  className="mb-4"
+                >
+                  Cancel
+                </Button>
+                <ProposalForm 
+                  jobId={jobId} 
+                  onProposalSubmitted={() => setShowProposalForm(false)} 
+                />
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

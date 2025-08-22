@@ -10,24 +10,31 @@ export default function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
   const { login } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
 
     try {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ email, password }),
       });
 
       const data = await response.json();
 
-      if (response.ok) {
-        login(data.token, data.user);
+      if (response.ok && data.success) {
+        // The cookies are automatically set by the server
+        // We just need to update the client-side state
+        login(data.user.token || '', data.user);
+        
+        // Redirect based on user role
         if (data.user.role === 'student') {
           router.push('/dashboard/student');
         } else if (data.user.role === 'business') {
@@ -38,6 +45,8 @@ export default function LoginForm() {
       }
     } catch (err) {
       setError('An error occurred. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -46,7 +55,7 @@ export default function LoginForm() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-900 to-purple-900">
+    <div className="h-min-screen flex items-center justify-center p-4 bg-black">
       <div className="w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-700">
         <div className="backdrop-blur-lg bg-white/10 border border-white/20 rounded-2xl p-8 shadow-2xl">
           <div className="text-center mb-8">
@@ -73,6 +82,7 @@ export default function LoginForm() {
                 onChange={(e) => setEmail(e.target.value)}
                 className="bg-white/10 border-white/20 text-white placeholder:text-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/50 transition-all duration-200"
                 required
+                disabled={loading}
               />
             </div>
 
@@ -88,14 +98,16 @@ export default function LoginForm() {
                 onChange={(e) => setPassword(e.target.value)}
                 className="bg-white/10 border-white/20 text-white placeholder:text-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/50 transition-all duration-200"
                 required
+                disabled={loading}
               />
             </div>
 
             <Button
               type="submit"
               className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold py-3 rounded-lg transition-all duration-200 hover:shadow-lg hover:shadow-blue-500/25 hover:-translate-y-0.5 active:scale-95"
+              disabled={loading}
             >
-              Log In
+              {loading ? 'Logging in...' : 'Log In'}
             </Button>
           </form>
 
@@ -105,6 +117,7 @@ export default function LoginForm() {
               <button
                 onClick={handleNavigateToSignUp}
                 className="text-blue-400 hover:text-blue-300 font-medium transition-colors duration-200"
+                disabled={loading}
               >
                 Sign Up
               </button>
