@@ -18,7 +18,8 @@ import { useToast } from '@/hooks/use-toast';
 interface Contract {
   _id: string;
   title: string;
-  status: "draft" | "pending" | "signed" | "completed" | "changes_requested";
+  status: "draft" | "pending" | "signed" | "completed" | "changes_requested" | "approved";
+  paymentStatus?: "pending" | "paid";
 }
 
 interface Proposal {
@@ -49,7 +50,7 @@ interface Proposal {
   quoteAmount: number;
   status: 'pending' | 'accepted' | 'rejected' | 'withdrawn';
   submittedAt: string;
-  contractId?: Contract;
+  contractId?: string | Contract; // Can be either ID string or populated object
 }
 
 interface ProposalListProps {
@@ -73,12 +74,20 @@ export default function ProposalList({ jobId, status }: ProposalListProps) {
   const [sortBy, setSortBy] = useState('submittedAt');
   const [selectedProposal, setSelectedProposal] = useState<Proposal | null>(null);
   const [createContractFor, setCreateContractFor] = useState<Proposal | null>(null);
+  
   // Add these state variables at the top of the component
   const [isGeneratingContract, setIsGeneratingContract] = useState(false);
   const [aiGeneratedTerms, setAiGeneratedTerms] = useState('');
+  
+  // Add this to your component
+  const [contractStatus, setContractStatus] = useState(null);
+  
+  // Add to your component state
+  const [requestedChanges, setRequestedChanges] = useState('');
+  
   const { token, user } = useAuth();
   const { toast } = useToast();
-
+  
   // Contract form state
   const [contractForm, setContractForm] = useState({
     title: '',
@@ -89,6 +98,26 @@ export default function ProposalList({ jobId, status }: ProposalListProps) {
     endDate: new Date(),
     terms: ''
   });
+
+  // Function to fetch contract details
+  const fetchContractDetails = async (contractId: string): Promise<Contract | null> => {
+    try {
+      const response = await fetch(`/api/contracts/${contractId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        return data.contract;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error fetching contract details:', error);
+      return null;
+    }
+  };
 
   const fetchProposals = async () => {
     try {
@@ -117,13 +146,139 @@ export default function ProposalList({ jobId, status }: ProposalListProps) {
       }
       
       const data = await response.json();
-      setProposals(data.proposals || []);
-      setFilteredProposals(data.proposals || []);
+      const proposalsData = data.proposals || [];
+      
+      // Fetch contract details for proposals that have a contractId
+      const proposalsWithContracts = await Promise.all(
+        proposalsData.map(async (proposal: Proposal) => {
+          if (proposal.contractId && typeof proposal.contractId === 'string') {
+            const contractDetails = await fetchContractDetails(proposal.contractId);
+            return { ...proposal, contractId: contractDetails };
+          }
+          return proposal;
+        })
+      );
+      
+      setProposals(proposalsWithContracts);
+      setFilteredProposals(proposalsWithContracts);
     } catch (error) {
       console.error('Failed to fetch proposals:', error);
       setError(error instanceof Error ? error.message : 'Failed to fetch proposals');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Function to check contract status
+  const checkContractStatus = async (contractId: string) => {
+    try {
+      const response = await fetch(`/api/contracts/${contractId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setContractStatus(data.contract.status);
+        
+        // Handle different statuses
+        if (data.contract.status === 'approved') {
+          // Show payment options
+        } else if (data.contract.status === 'changes_requested') {
+          // Show requested changes
+        }
+      }
+    } catch (error) {
+      console.error('Error checking contract status:', error);
+    }
+  };
+
+  // Function to fetch requested changes
+  const fetchRequestedChanges = async (contractId: string) => {
+    try {
+      const response = await fetch(`/api/contracts/${contractId}/changes`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setRequestedChanges(data.changes);
+      }
+    } catch (error) {
+      console.error('Error fetching requested changes:', error);
+    }
+  };
+
+  // Function to update contract with changes
+  const handleUpdateContract = async (contractId: string) => {
+    try {
+      const response = await fetch(`/api/contracts/${contractId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          ...contractForm,
+          status: 'pending' // Reset to pending for student review
+        }),
+      });
+      
+      if (response.ok) {
+        toast({
+          title: 'Contract updated',
+          description: 'The updated contract has been sent to the student for review.',
+        });
+        
+        // Close dialog and refresh data
+        setCreateContractFor(null);
+        fetchProposals();
+      }
+    } catch (error) {
+      console.error('Error updating contract:', error);
+      toast({
+        title: 'Failed to update contract',
+        description: error instanceof Error ? error.message : 'Failed to update contract.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Function to handle payment
+  const handlePayment = async (contractId: string) => {
+    try {
+      const response = await fetch(`/api/contracts/${contractId}/payment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      
+      if (response.ok) {
+        toast({
+          title: 'Payment processed',
+          description: 'Your payment has been processed successfully.',
+        });
+        fetchProposals();
+      } else {
+        const errorData = await response.json();
+        toast({
+          title: 'Payment failed',
+          description: errorData.error || 'Failed to process payment.',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Error processing payment:', error);
+      toast({
+        title: 'Payment failed',
+        description: error instanceof Error ? error.message : 'Failed to process payment.',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -403,7 +558,7 @@ export default function ProposalList({ jobId, status }: ProposalListProps) {
   }
 
   const statusCounts = getStatusCounts();
-
+  
   return (
     <div className="space-y-6">
       {/* Status Summary */}
@@ -588,7 +743,38 @@ export default function ProposalList({ jobId, status }: ProposalListProps) {
                       </div>
                     )}
                     
-                    {proposal.status === 'accepted' && (
+                    {/* Add this to your proposal card for accepted proposals with contracts */}
+                    {proposal.status === 'accepted' && proposal.contractId && typeof proposal.contractId !== 'string' && (
+                      <div className="mt-2">
+                        <Badge variant={proposal.contractId.status === 'approved' ? 'default' : 'secondary'}>
+                          Contract: {proposal.contractId.status}
+                        </Badge>
+                        {proposal.contractId.status === 'approved' && proposal.contractId.paymentStatus === 'pending' && (
+                          <Button 
+                            size="sm" 
+                            className="ml-2"
+                            onClick={() => handlePayment(proposal.contractId._id)}
+                          >
+                            Make Payment
+                          </Button>
+                        )}
+                        {proposal.contractId.status === 'changes_requested' && (
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            className="ml-2"
+                            onClick={() => {
+                              setCreateContractFor(proposal);
+                              fetchRequestedChanges(proposal.contractId._id);
+                            }}
+                          >
+                            Review Changes
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                    
+                    {proposal.status === 'accepted' && (!proposal.contractId || typeof proposal.contractId === 'string') && (
                       <Button 
                         size="sm"
                         onClick={() => setCreateContractFor(proposal)}
@@ -604,7 +790,6 @@ export default function ProposalList({ jobId, status }: ProposalListProps) {
           ))}
         </div>
       )}
-
       
       {/* Create Contract Dialog */}
       {createContractFor && (

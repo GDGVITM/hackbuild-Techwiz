@@ -36,7 +36,7 @@ export async function POST(
     }
     
     // Update contract status
-    contract.status = 'signed'; // or 'accepted' depending on your workflow
+    contract.status = 'approved'; // Use 'approved' status which is in the enum
     contract.updatedAt = new Date();
     await contract.save();
     
@@ -45,7 +45,7 @@ export async function POST(
       success: true, 
       contract: {
         ...contract.toObject(),
-        status: 'signed'
+        status: 'approved'
       }
     });
   } catch (error: any) {
