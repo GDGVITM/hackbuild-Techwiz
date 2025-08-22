@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/context/AuthContext';
 
 interface Milestone {
@@ -27,17 +28,33 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
   const [quoteAmount, setQuoteAmount] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [totalMilestoneAmount, setTotalMilestoneAmount] = useState(0);
+  const [validationStatus, setValidationStatus] = useState<'valid' | 'invalid' | 'empty'>('empty');
   const { token } = useAuth();
 
-  const handleMilestoneChange = (index: number, field: keyof Milestone, value: string | number) => {
-  const updatedMilestones = [...milestones];
-  updatedMilestones[index] = {
-    ...updatedMilestones[index],
-    [field]: field === "amount" ? Number(value) : value,
-  };
-  setMilestones(updatedMilestones);
-};
+  // Calculate total milestone amount whenever milestones change
+  useEffect(() => {
+    const total = milestones.reduce((sum, m) => sum + Number(m.amount), 0);
+    setTotalMilestoneAmount(total);
+    
+    // Update validation status
+    if (total === 0 && !quoteAmount) {
+      setValidationStatus('empty');
+    } else if (Math.abs(total - Number(quoteAmount || 0)) <= 0.01) {
+      setValidationStatus('valid');
+    } else {
+      setValidationStatus('invalid');
+    }
+  }, [milestones, quoteAmount]);
 
+  const handleMilestoneChange = (index: number, field: keyof Milestone, value: string | number) => {
+    const updatedMilestones = [...milestones];
+    updatedMilestones[index] = {
+      ...updatedMilestones[index],
+      [field]: field === "amount" ? Number(value) : value,
+    };
+    setMilestones(updatedMilestones);
+  };
 
   const addMilestone = () => {
     setMilestones([...milestones, { title: '', amount: 0, dueDate: '' }]);
@@ -47,6 +64,18 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
     if (milestones.length > 1) {
       setMilestones(milestones.filter((_, i) => i !== index));
     }
+  };
+
+  const distributeEvenly = () => {
+    if (!quoteAmount || milestones.length === 0) return;
+    
+    const amountPerMilestone = Number(quoteAmount) / milestones.length;
+    const updatedMilestones = milestones.map(milestone => ({
+      ...milestone,
+      amount: parseFloat(amountPerMilestone.toFixed(2))
+    }));
+    
+    setMilestones(updatedMilestones);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -60,11 +89,8 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
         return;
       }
 
-      // Calculate total milestone amount
-      const totalMilestoneAmount = milestones.reduce((sum, m) => sum + Number(m.amount), 0);
-      
       // Validate milestone amounts match quote amount
-      if (Math.abs(totalMilestoneAmount - Number(quoteAmount)) > 0.01) {
+      if (validationStatus === 'invalid') {
         setError('Total milestone amounts must equal the quote amount');
         return;
       }
@@ -105,6 +131,22 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
     }
   };
 
+  const getValidationColor = () => {
+    switch (validationStatus) {
+      case 'valid': return 'bg-green-100 text-green-700 border-green-300';
+      case 'invalid': return 'bg-red-100 text-red-700 border-red-300';
+      default: return 'bg-gray-100 text-gray-700 border-gray-300';
+    }
+  };
+
+  const getValidationText = () => {
+    switch (validationStatus) {
+      case 'valid': return '✓ Amounts match perfectly!';
+      case 'invalid': return `⚠️ Difference: $${Math.abs(totalMilestoneAmount - Number(quoteAmount || 0)).toFixed(2)}`;
+      default: return 'Enter amounts to validate';
+    }
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -112,7 +154,7 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
       </CardHeader>
       <CardContent>
         {error && (
-          <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md">
+          <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md border border-red-300">
             {error}
           </div>
         )}
@@ -139,6 +181,7 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
               value={quoteAmount}
               onChange={(e) => setQuoteAmount(e.target.value)}
               className="mt-1"
+              placeholder="Enter total project amount"
               required
             />
           </div>
@@ -146,9 +189,24 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
           <div>
             <div className="flex justify-between items-center mb-2">
               <Label>Milestones</Label>
-              <Button type="button" variant="outline" onClick={addMilestone}>
-                + Add Milestone
-              </Button>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={distributeEvenly}>
+                  Distribute Evenly
+                </Button>
+                <Button type="button" variant="outline" onClick={addMilestone}>
+                  + Add Milestone
+                </Button>
+              </div>
+            </div>
+            
+            {/* Validation Status */}
+            <div className={`mb-4 p-3 rounded-md border ${getValidationColor()}`}>
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium">
+                  Total Milestones: ${totalMilestoneAmount.toFixed(2)}
+                </span>
+                <span className="text-sm">{getValidationText()}</span>
+              </div>
             </div>
             
             {milestones.map((milestone, index) => (
@@ -174,6 +232,7 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
                       id={`milestone-title-${index}`}
                       value={milestone.title}
                       onChange={(e) => handleMilestoneChange(index, 'title', e.target.value)}
+                      placeholder="Milestone description"
                       required
                     />
                   </div>
@@ -185,6 +244,8 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
                       type="number"
                       value={milestone.amount}
                       onChange={(e) => handleMilestoneChange(index, 'amount', Number(e.target.value))}
+                      placeholder="0.00"
+                      step="0.01"
                       required
                     />
                   </div>
@@ -204,7 +265,11 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
             ))}
           </div>
           
-          <Button type="submit" disabled={loading} className="w-full">
+          <Button 
+            type="submit" 
+            disabled={loading || validationStatus === 'invalid'} 
+            className="w-full"
+          >
             {loading ? 'Submitting...' : 'Submit Proposal'}
           </Button>
         </form>
