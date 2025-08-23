@@ -170,6 +170,7 @@ export default function StudentDashboard() {
         const data = await response.json();
         if (response.ok) {
           setProposals(data.proposals);
+          console.log("Fetched proposals:", data.proposals);
         }
       } catch (err) {
         console.error("Failed to fetch proposals:", err);
@@ -241,19 +242,28 @@ export default function StudentDashboard() {
     return Array.from(skills).sort();
   };
   // Get job details for proposals
+  // const getJobDetails = (jobId: string) => {
+  //   return jobs.find((job) => job._id === jobId);
+  // };
   const getJobDetails = (jobId: string) => {
-    return jobs.find((job) => job._id === jobId);
-  };
+  if (!jobId) return null;
+  return jobs.find((job) => job._id === jobId);
+};
   // Create a set of job IDs that the student has already applied to
+  // const appliedJobIds = useMemo(() => 
+  //   new Set(proposals.map((p) => p.jobId)), 
+  //   [proposals]
+  // );
   const appliedJobIds = useMemo(() => 
-    new Set(proposals.map((p) => p.jobId)), 
-    [proposals]
-  );
+  new Set(proposals.filter(p => p.jobId).map((p) => p.jobId)), 
+  [proposals]
+);
   // Get the status of a proposal for a specific job
   const getProposalStatus = (jobId: string) => {
-    const proposal = proposals.find((p) => p.jobId === jobId);
-    return proposal ? proposal.status : null;
-  };
+  if (!jobId) return null;
+  const proposal = proposals.find((p) => p.jobId === jobId);
+  return proposal ? proposal.status : null;
+};
   // Handle job application
   const handleApplyToJob = (job: Job) => {
     router.push(`/dashboard/student/jobs/${job._id}?action=submit`);
@@ -1330,10 +1340,10 @@ export default function StudentDashboard() {
                   <CardContent className="p-4">
                     <div className="flex justify-between items-start">
                       <div>
-                        <h3 className="font-semibold">{proposal.jobId.title}</h3>
+                        <h3 className="font-semibold">{proposal.jobId?.title || 'Job Title Not Available'}</h3>
                         <p className="text-sm text-gray-600">
-                          {proposal.jobId.description.substring(0, 100)}...
-                        </p>
+  {proposal.jobId?.description ? `${proposal.jobId.description.substring(0, 100)}...` : 'Job description not available'}
+</p>
                         <div className="flex items-center gap-2 mt-2">
                           <Badge variant={
                             proposal.status === 'accepted' ? 'default' :

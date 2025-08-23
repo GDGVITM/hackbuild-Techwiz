@@ -48,16 +48,19 @@ interface Contract {
   changeRequests?: ChangeRequest[];
 }
 
+interface Job {
+  _id: string;
+  title: string;
+  businessId: {
+    _id: string;
+    name: string;
+  };
+}
+
 interface Proposal {
   _id: string;
-  jobId: {
-    _id: string;
-    title: string;
-    businessId: {
-      _id: string;
-      name: string;
-    };
-  };
+  jobId: string | Job | null; // Can be either ID string, populated object, or null
+  studentId: string;
   coverLetter: string;
   milestones: Array<{
     title: string;
@@ -94,6 +97,26 @@ export default function StudentProposalsPage() {
   const { token } = useAuth();
   const router = useRouter();
 
+  // Function to fetch job details
+  const fetchJobDetails = async (jobId: string): Promise<Job | null> => {
+    try {
+      const response = await fetch(`/api/jobs/${jobId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!response.ok) {
+        console.error(`Failed to fetch job ${jobId}`);
+        return null;
+      }
+      const data = await response.json();
+      return data.job;
+    } catch (error) {
+      console.error(`Error fetching job ${jobId}:`, error);
+      return null;
+    }
+  };
+
   const fetchProposals = async () => {
     try {
       setLoading(true);
@@ -102,7 +125,6 @@ export default function StudentProposalsPage() {
           Authorization: `Bearer ${token}`,
         },
       });
-
       if (!response.ok) {
         const errorData = await response
           .json()
@@ -111,46 +133,61 @@ export default function StudentProposalsPage() {
           errorData.error || `HTTP error! status: ${response.status}`
         );
       }
-
       const data = await response.json();
-      const newProposals = data.proposals || [];
-
+      let newProposals = data.proposals || [];
+      
+      // Fetch job details for proposals that have jobId as a string
+      const proposalsWithJobs = await Promise.all(
+        newProposals.map(async (proposal: Proposal) => {
+          if (!proposal.jobId) {
+            // Handle null jobId case
+            return {
+              ...proposal,
+              jobId: { _id: "", title: "Unknown Job", businessId: { _id: "", name: "Unknown Business" } }
+            };
+          }
+          if (typeof proposal.jobId === 'string') {
+            const jobDetails = await fetchJobDetails(proposal.jobId);
+            return {
+              ...proposal,
+              jobId: jobDetails || { _id: proposal.jobId, title: "Unknown Job", businessId: { _id: "", name: "Unknown Business" } }
+            };
+          }
+          return proposal;
+        })
+      );
+      
       // Check for status changes
       if (previousProposals.length > 0) {
-        newProposals.forEach((newProposal: Proposal) => {
+        proposalsWithJobs.forEach((newProposal: Proposal) => {
           const oldProposal = previousProposals.find(
             (p) => p._id === newProposal._id
           );
-
           // Check for proposal status changes
           if (oldProposal && oldProposal.status !== newProposal.status) {
             let notificationType: "success" | "error" | "warning" | "info" =
               "info";
             let title = "Proposal Status Updated";
-            let message = `Your proposal for "${newProposal.jobId.title}" status changed from ${oldProposal.status} to ${newProposal.status}.`;
-
+            let message = `Your proposal for "${newProposal.jobId && typeof newProposal.jobId === 'object' ? newProposal.jobId.title : 'Unknown Job'}" status changed from ${oldProposal.status} to ${newProposal.status}.`;
             if (newProposal.status === "accepted") {
               notificationType = "success";
               title = "🎉 Proposal Accepted!";
-              message = `Congratulations! Your proposal for "${newProposal.jobId.title}" has been accepted!`;
+              message = `Congratulations! Your proposal for "${newProposal.jobId && typeof newProposal.jobId === 'object' ? newProposal.jobId.title : 'Unknown Job'}" has been accepted!`;
             } else if (newProposal.status === "rejected") {
               notificationType = "warning";
               title = "Proposal Not Selected";
-              message = `Your proposal for "${newProposal.jobId.title}" was not selected. Don't worry, there are many other opportunities!`;
+              message = `Your proposal for "${newProposal.jobId && typeof newProposal.jobId === 'object' ? newProposal.jobId.title : 'Unknown Job'}" was not selected. Don't worry, there are many other opportunities!`;
             }
-
             setNotification({
               title,
               message,
               type: notificationType,
             });
-
             // Auto-hide notification after 10 seconds
             setTimeout(() => {
               setNotification(null);
             }, 10000);
           }
-
           // Check for contract status changes
           if (
             oldProposal?.contract &&
@@ -160,24 +197,21 @@ export default function StudentProposalsPage() {
             let notificationType: "success" | "error" | "warning" | "info" =
               "info";
             let title = "Contract Status Updated";
-            let message = `The contract for "${newProposal.jobId.title}" status changed to ${newProposal.contract.status}.`;
-
+            let message = `The contract for "${newProposal.jobId && typeof newProposal.jobId === 'object' ? newProposal.jobId.title : 'Unknown Job'}" status changed to ${newProposal.contract.status}.`;
             if (newProposal.contract.status === "signed") {
               notificationType = "success";
               title = "🎉 Contract Signed!";
-              message = `Your contract for "${newProposal.jobId.title}" has been signed!`;
+              message = `Your contract for "${newProposal.jobId && typeof newProposal.jobId === 'object' ? newProposal.jobId.title : 'Unknown Job'}" has been signed!`;
             } else if (newProposal.contract.status === "changes_requested") {
               notificationType = "warning";
               title = "Changes Requested";
-              message = `The business has requested changes to the contract for "${newProposal.jobId.title}".`;
+              message = `The business has requested changes to the contract for "${newProposal.jobId && typeof newProposal.jobId === 'object' ? newProposal.jobId.title : 'Unknown Job'}".`;
             }
-
             setNotification({
               title,
               message,
               type: notificationType,
             });
-
             // Auto-hide notification after 10 seconds
             setTimeout(() => {
               setNotification(null);
@@ -185,10 +219,9 @@ export default function StudentProposalsPage() {
           }
         });
       }
-
-      setPreviousProposals(newProposals);
-      setProposals(newProposals);
-      setFilteredProposals(newProposals);
+      setPreviousProposals(proposalsWithJobs);
+      setProposals(proposalsWithJobs);
+      setFilteredProposals(proposalsWithJobs);
     } catch (error) {
       console.error("Failed to fetch proposals:", error);
       setError(
@@ -208,20 +241,16 @@ export default function StudentProposalsPage() {
           Authorization: `Bearer ${token}`,
         },
       });
-
       if (!response.ok) {
         throw new Error("Failed to accept contract");
       }
-
       // Refresh proposals to get updated contract status
       fetchProposals();
-
       setNotification({
         title: "Contract Accepted",
         message: "You have successfully accepted the contract.",
         type: "success",
       });
-
       // Auto-hide notification after 10 seconds
       setTimeout(() => {
         setNotification(null);
@@ -233,7 +262,6 @@ export default function StudentProposalsPage() {
         message: "Failed to accept contract. Please try again.",
         type: "error",
       });
-
       // Auto-hide notification after 10 seconds
       setTimeout(() => {
         setNotification(null);
@@ -245,7 +273,6 @@ export default function StudentProposalsPage() {
 
   const handleRequestChanges = async () => {
     if (!currentContract || !changeRequestMessage.trim()) return;
-
     setContractActionLoading(currentContract._id);
     try {
       const response = await fetch(
@@ -259,25 +286,20 @@ export default function StudentProposalsPage() {
           body: JSON.stringify({ message: changeRequestMessage }),
         }
       );
-
       if (!response.ok) {
         throw new Error("Failed to request changes");
       }
-
       // Close modal and reset
       setShowChangeRequestModal(false);
       setCurrentContract(null);
       setChangeRequestMessage("");
-
       // Refresh proposals
       fetchProposals();
-
       setNotification({
         title: "Change Request Sent",
         message: "Your change request has been sent to the business.",
         type: "info",
       });
-
       // Auto-hide notification after 10 seconds
       setTimeout(() => {
         setNotification(null);
@@ -289,7 +311,6 @@ export default function StudentProposalsPage() {
         message: "Failed to send change request. Please try again.",
         type: "error",
       });
-
       // Auto-hide notification after 10 seconds
       setTimeout(() => {
         setNotification(null);
@@ -337,14 +358,15 @@ export default function StudentProposalsPage() {
     // Filter by search term
     if (searchTerm) {
       filtered = filtered.filter(
-        (proposal) =>
-          proposal.jobId.title
-            .toLowerCase()
-            .includes(searchTerm.toLowerCase()) ||
-          proposal.jobId.businessId.name
-            .toLowerCase()
-            .includes(searchTerm.toLowerCase()) ||
-          proposal.coverLetter.toLowerCase().includes(searchTerm.toLowerCase())
+        (proposal) => {
+          // Fix: Add null check before accessing properties
+          const jobTitle = proposal.jobId && typeof proposal.jobId === 'object' ? proposal.jobId.title : '';
+          const businessName = proposal.jobId && typeof proposal.jobId === 'object' ? proposal.jobId.businessId.name : '';
+          
+          return jobTitle.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            businessName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            proposal.coverLetter.toLowerCase().includes(searchTerm.toLowerCase());
+        }
       );
     }
     // Sort proposals
@@ -358,7 +380,10 @@ export default function StudentProposalsPage() {
         case "quoteAmount":
           return b.quoteAmount - a.quoteAmount;
         case "jobTitle":
-          return a.jobId.title.localeCompare(b.jobId.title);
+          // Fix: Add null check before accessing properties
+          const titleA = a.jobId && typeof a.jobId === 'object' ? a.jobId.title : '';
+          const titleB = b.jobId && typeof b.jobId === 'object' ? b.jobId.title : '';
+          return titleA.localeCompare(titleB);
         case "status":
           return a.status.localeCompare(b.status);
         default:
@@ -466,7 +491,6 @@ export default function StudentProposalsPage() {
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-2xl font-bold mb-6">My Proposals</h1>
-
       {/* Status Change Notification */}
       {notification && (
         <div className="mb-6">
@@ -478,7 +502,6 @@ export default function StudentProposalsPage() {
           />
         </div>
       )}
-
       {/* Filters */}
       <Card>
         <CardContent className="p-4">
@@ -522,7 +545,6 @@ export default function StudentProposalsPage() {
           </div>
         </CardContent>
       </Card>
-
       {/* Status Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <Card>
@@ -566,7 +588,6 @@ export default function StudentProposalsPage() {
           </CardContent>
         </Card>
       </div>
-
       {/* Proposals List */}
       {filteredProposals.length === 0 ? (
         <div className="text-center py-8 text-gray-500">
@@ -576,96 +597,257 @@ export default function StudentProposalsPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {filteredProposals.map((proposal) => (
-            <Card
-              key={proposal._id}
-              className="hover:shadow-md transition-shadow"
-            >
-              <CardHeader>
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <CardTitle className="text-lg">
-                      <Link
-                        href={`/dashboard/student/proposals/${proposal._id}`}
-                        className="hover:text-blue-600"
-                      >
-                        {proposal.jobId.title}
-                      </Link>
-                    </CardTitle>
-                    <CardDescription>
-                      {proposal.jobId.businessId.name} • Submitted on{" "}
-                      {new Date(proposal.submittedAt).toLocaleDateString()}
-                    </CardDescription>
-                  </div>
-                  <div className="flex flex-col items-end gap-2">
-                    {getStatusBadge(proposal.status)}
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className="mb-4 text-gray-700 line-clamp-2">
-                  {proposal.coverLetter}
-                </p>
-
-                {/* Contract Section */}
-                {proposal.status === "accepted" && proposal.contract && (
-                  <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200 shadow-sm">
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <h4 className="font-medium text-blue-800 flex items-center gap-2">
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            className="h-5 w-5"
-                            viewBox="0 0 20 20"
-                            fill="currentColor"
-                          >
-                            <path
-                              fillRule="evenodd"
-                              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                              clipRule="evenodd"
-                            />
-                          </svg>
-                          Contract Details
-                        </h4>
-                        <p className="text-sm text-blue-700">
-                          Created:{" "}
-                          {new Date(
-                            proposal.contract.createdAt
-                          ).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <div className="flex flex-col items-end gap-1">
-                        {getContractBadge(proposal.contract.status)}
-                        {proposal.contract.status === "pending" && (
-                          <span className="text-xs text-orange-600 font-medium">
-                            Action Required
-                          </span>
-                        )}
-                      </div>
+          {filteredProposals.map((proposal) => {
+            // Fix: Add null check before accessing properties
+            const jobTitle = proposal.jobId && typeof proposal.jobId === 'object' ? proposal.jobId.title : "Unknown Job";
+            const businessName = proposal.jobId && typeof proposal.jobId === 'object' ? proposal.jobId.businessId.name : "Unknown Business";
+            const jobId = proposal.jobId && typeof proposal.jobId === 'object' ? proposal.jobId._id : proposal.jobId || "unknown";
+            
+            return (
+              <Card
+                key={proposal._id}
+                className="hover:shadow-md transition-shadow"
+              >
+                <CardHeader>
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <CardTitle className="text-lg">
+                        <Link
+                          href={`/dashboard/student/proposals/${proposal._id}`}
+                          className="hover:text-blue-600"
+                        >
+                          {jobTitle}
+                        </Link>
+                      </CardTitle>
+                      <CardDescription>
+                        {businessName} • Submitted on{" "}
+                        {new Date(proposal.submittedAt).toLocaleDateString()}
+                      </CardDescription>
                     </div>
-
-                    {/* Contract Preview */}
-                    <div className="mb-3 p-3 bg-white rounded border border-blue-100">
-                      <div className="text-sm text-gray-700 line-clamp-3">
-                        <div
-                          dangerouslySetInnerHTML={{
-                            __html:
-                              proposal.contract.content
-                                .replace(/<[^>]*>?/gm, "")
-                                .substring(0, 150) + "...",
-                          }}
-                        />
-                      </div>
+                    <div className="flex flex-col items-end gap-2">
+                      {getStatusBadge(proposal.status)}
                     </div>
-
-                    {/* Change Requests */}
-                    {proposal.contract.changeRequests &&
-                      proposal.contract.changeRequests.length > 0 && (
-                        <div className="mb-3">
-                          <h5 className="text-sm font-medium text-blue-800 mb-2 flex items-center gap-1">
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <p className="mb-4 text-gray-700 line-clamp-2">
+                    {proposal.coverLetter}
+                  </p>
+                  {/* Contract Section */}
+                  {proposal.status === "accepted" && proposal.contract && (
+                    <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200 shadow-sm">
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <h4 className="font-medium text-blue-800 flex items-center gap-2">
                             <svg
                               xmlns="http://www.w3.org/2000/svg"
-                              className="h-4 w-4"
+                              className="h-5 w-5"
+                              viewBox="0 0 20 20"
+                              fill="currentColor"
+                            >
+                              <path
+                                fillRule="evenodd"
+                                d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                                clipRule="evenodd"
+                              />
+                            </svg>
+                            Contract Details
+                          </h4>
+                          <p className="text-sm text-blue-700">
+                            Created:{" "}
+                            {new Date(
+                              proposal.contract.createdAt
+                            ).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <div className="flex flex-col items-end gap-1">
+                          {getContractBadge(proposal.contract.status)}
+                          {proposal.contract.status === "pending" && (
+                            <span className="text-xs text-orange-600 font-medium">
+                              Action Required
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {/* Contract Preview */}
+                      <div className="mb-3 p-3 bg-white rounded border border-blue-100">
+                        <div className="text-sm text-gray-700 line-clamp-3">
+                          <div
+                            dangerouslySetInnerHTML={{
+                              __html:
+                                proposal.contract.content
+                                  .replace(/<[^>]*>?/gm, "")
+                                  .substring(0, 150) + "...",
+                            }}
+                          />
+                        </div>
+                      </div>
+                      {/* Change Requests */}
+                      {proposal.contract.changeRequests &&
+                        proposal.contract.changeRequests.length > 0 && (
+                          <div className="mb-3">
+                            <h5 className="text-sm font-medium text-blue-800 mb-2 flex items-center gap-1">
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                className="h-4 w-4"
+                                viewBox="0 0 20 20"
+                                fill="currentColor"
+                              >
+                                <path
+                                  fillRule="evenodd"
+                                  d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                                  clipRule="evenodd"
+                                />
+                              </svg>
+                              Change Requests:
+                            </h5>
+                            <div className="space-y-2 max-h-32 overflow-y-auto pr-2">
+                              {proposal.contract.changeRequests.map((cr) => (
+                                <div
+                                  key={cr._id}
+                                  className="text-sm bg-white p-2 rounded border border-blue-200"
+                                >
+                                  <p className="text-gray-700">{cr.message}</p>
+                                  <div className="flex justify-between mt-1">
+                                    <Badge
+                                      variant={
+                                        cr.status === "resolved"
+                                          ? "default"
+                                          : "outline"
+                                      }
+                                      className={`text-xs ${
+                                        cr.status === "resolved"
+                                          ? "bg-green-100 text-green-800"
+                                          : "text-orange-700 border-orange-300"
+                                      }`}
+                                    >
+                                      {cr.status === "resolved"
+                                        ? "Resolved"
+                                        : "Pending"}
+                                    </Badge>
+                                    <span className="text-xs text-gray-500">
+                                      {new Date(
+                                        cr.createdAt
+                                      ).toLocaleDateString()}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      {/* Contract Actions */}
+                      <div className="flex flex-wrap gap-2">
+                        <Link
+                          href={`/dashboard/student/contracts/${proposal.contract._id}`}
+                        >
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-blue-700 border-blue-300 hover:bg-blue-50"
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              className="h-4 w-4 mr-1"
+                              viewBox="0 0 20 20"
+                              fill="currentColor"
+                            >
+                              <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                              <path
+                                fillRule="evenodd"
+                                d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z"
+                                clipRule="evenodd"
+                              />
+                            </svg>
+                            Review Full Contract
+                          </Button>
+                        </Link>
+                        {proposal.contract.status === "pending" && (
+                          <>
+                            <Button
+                              size="sm"
+                              className="bg-green-600 hover:bg-green-700"
+                              onClick={() =>
+                                handleAcceptContract(proposal.contract!._id)
+                              }
+                              disabled={
+                                contractActionLoading === proposal.contract!._id
+                              }
+                            >
+                              {contractActionLoading ===
+                              proposal.contract!._id ? (
+                                <>
+                                  <svg
+                                    className="animate-spin -ml-1 mr-1 h-4 w-4 text-white"
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <circle
+                                      className="opacity-25"
+                                      cx="12"
+                                      cy="12"
+                                      r="10"
+                                      stroke="currentColor"
+                                      strokeWidth="4"
+                                    ></circle>
+                                    <path
+                                      className="opacity-75"
+                                      fill="currentColor"
+                                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                    ></path>
+                                  </svg>
+                                  Processing...
+                                </>
+                              ) : (
+                                <>
+                                  <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    className="h-4 w-4 mr-1"
+                                    viewBox="0 0 20 20"
+                                    fill="currentColor"
+                                  >
+                                    <path
+                                      fillRule="evenodd"
+                                      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                      clipRule="evenodd"
+                                    />
+                                  </svg>
+                                  Accept Contract
+                                </>
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-orange-600 border-orange-300 hover:bg-orange-50"
+                              onClick={() =>
+                                openChangeRequestModal(proposal.contract!)
+                              }
+                              disabled={
+                                contractActionLoading === proposal.contract!._id
+                              }
+                            >
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                className="h-4 w-4 mr-1"
+                                viewBox="0 0 20 20"
+                                fill="currentColor"
+                              >
+                                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                              </svg>
+                              Request Changes
+                            </Button>
+                          </>
+                        )}
+                        {proposal.contract.status === "changes_requested" && (
+                          <Badge
+                            variant="outline"
+                            className="text-orange-700 border-orange-300 text-xs py-1 px-2"
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              className="h-3 w-3 mr-1"
                               viewBox="0 0 20 20"
                               fill="currentColor"
                             >
@@ -675,54 +857,57 @@ export default function StudentProposalsPage() {
                                 clipRule="evenodd"
                               />
                             </svg>
-                            Change Requests:
-                          </h5>
-                          <div className="space-y-2 max-h-32 overflow-y-auto pr-2">
-                            {proposal.contract.changeRequests.map((cr) => (
-                              <div
-                                key={cr._id}
-                                className="text-sm bg-white p-2 rounded border border-blue-200"
-                              >
-                                <p className="text-gray-700">{cr.message}</p>
-                                <div className="flex justify-between mt-1">
-                                  <Badge
-                                    variant={
-                                      cr.status === "resolved"
-                                        ? "default"
-                                        : "outline"
-                                    }
-                                    className={`text-xs ${
-                                      cr.status === "resolved"
-                                        ? "bg-green-100 text-green-800"
-                                        : "text-orange-700 border-orange-300"
-                                    }`}
-                                  >
-                                    {cr.status === "resolved"
-                                      ? "Resolved"
-                                      : "Pending"}
-                                  </Badge>
-                                  <span className="text-xs text-gray-500">
-                                    {new Date(
-                                      cr.createdAt
-                                    ).toLocaleDateString()}
-                                  </span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
+                            Awaiting Business Response
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {/* Milestones Section */}
+                  <div className="mb-4">
+                    <h4 className="font-medium mb-2 flex items-center gap-1">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-5 w-5 text-gray-500"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                      Milestones:
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {proposal.milestones.slice(0, 2).map((milestone, index) => (
+                        <div
+                          key={index}
+                          className="flex justify-between text-sm bg-gray-50 p-2 rounded border border-gray-200"
+                        >
+                          <span className="truncate">{milestone.title}</span>
+                          <span className="font-medium">${milestone.amount}</span>
+                        </div>
+                      ))}
+                      {proposal.milestones.length > 2 && (
+                        <div className="text-sm text-gray-500 flex items-center justify-center p-2">
+                          +{proposal.milestones.length - 2} more milestones
                         </div>
                       )}
-
-                    {/* Contract Actions */}
-                    <div className="flex flex-wrap gap-2">
-                      <Link
-                        href={`/dashboard/student/contracts/${proposal.contract._id}`}
-                      >
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-blue-700 border-blue-300 hover:bg-blue-50"
-                        >
+                    </div>
+                  </div>
+                  {/* Proposal Footer */}
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pt-3 border-t border-gray-100">
+                    <div>
+                      <span className="text-sm text-gray-500">Total Amount:</span>
+                      <span className="font-medium text-lg ml-2">
+                        ${proposal.quoteAmount}
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <Link href={`/dashboard/student/proposals/${proposal._id}`}>
+                        <Button variant="outline" size="sm" className="h-8">
                           <svg
                             xmlns="http://www.w3.org/2000/svg"
                             className="h-4 w-4 mr-1"
@@ -736,202 +921,36 @@ export default function StudentProposalsPage() {
                               clipRule="evenodd"
                             />
                           </svg>
-                          Review Full Contract
+                          View Details
                         </Button>
                       </Link>
-
-                      {proposal.contract.status === "pending" && (
-                        <>
-                          <Button
-                            size="sm"
-                            className="bg-green-600 hover:bg-green-700"
-                            onClick={() =>
-                              handleAcceptContract(proposal.contract!._id)
-                            }
-                            disabled={
-                              contractActionLoading === proposal.contract!._id
-                            }
-                          >
-                            {contractActionLoading ===
-                            proposal.contract!._id ? (
-                              <>
-                                <svg
-                                  className="animate-spin -ml-1 mr-1 h-4 w-4 text-white"
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  fill="none"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <circle
-                                    className="opacity-25"
-                                    cx="12"
-                                    cy="12"
-                                    r="10"
-                                    stroke="currentColor"
-                                    strokeWidth="4"
-                                  ></circle>
-                                  <path
-                                    className="opacity-75"
-                                    fill="currentColor"
-                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                  ></path>
-                                </svg>
-                                Processing...
-                              </>
-                            ) : (
-                              <>
-                                <svg
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  className="h-4 w-4 mr-1"
-                                  viewBox="0 0 20 20"
-                                  fill="currentColor"
-                                >
-                                  <path
-                                    fillRule="evenodd"
-                                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                                    clipRule="evenodd"
-                                  />
-                                </svg>
-                                Accept Contract
-                              </>
-                            )}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-orange-600 border-orange-300 hover:bg-orange-50"
-                            onClick={() =>
-                              openChangeRequestModal(proposal.contract!)
-                            }
-                            disabled={
-                              contractActionLoading === proposal.contract!._id
-                            }
-                          >
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              className="h-4 w-4 mr-1"
-                              viewBox="0 0 20 20"
-                              fill="currentColor"
-                            >
-                              <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                            </svg>
-                            Request Changes
-                          </Button>
-                        </>
-                      )}
-
-                      {proposal.contract.status === "changes_requested" && (
-                        <Badge
-                          variant="outline"
-                          className="text-orange-700 border-orange-300 text-xs py-1 px-2"
-                        >
+                      <Link
+                        href={`/dashboard/student/jobs/${jobId}`}
+                      >
+                        <Button variant="outline" size="sm" className="h-8">
                           <svg
                             xmlns="http://www.w3.org/2000/svg"
-                            className="h-3 w-3 mr-1"
+                            className="h-4 w-4 mr-1"
                             viewBox="0 0 20 20"
                             fill="currentColor"
                           >
                             <path
                               fillRule="evenodd"
-                              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
                               clipRule="evenodd"
                             />
                           </svg>
-                          Awaiting Business Response
-                        </Badge>
-                      )}
+                          View Job
+                        </Button>
+                      </Link>
                     </div>
                   </div>
-                )}
-
-                {/* Milestones Section */}
-                <div className="mb-4">
-                  <h4 className="font-medium mb-2 flex items-center gap-1">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-5 w-5 text-gray-500"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                    Milestones:
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    {proposal.milestones.slice(0, 2).map((milestone, index) => (
-                      <div
-                        key={index}
-                        className="flex justify-between text-sm bg-gray-50 p-2 rounded border border-gray-200"
-                      >
-                        <span className="truncate">{milestone.title}</span>
-                        <span className="font-medium">${milestone.amount}</span>
-                      </div>
-                    ))}
-                    {proposal.milestones.length > 2 && (
-                      <div className="text-sm text-gray-500 flex items-center justify-center p-2">
-                        +{proposal.milestones.length - 2} more milestones
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Proposal Footer */}
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pt-3 border-t border-gray-100">
-                  <div>
-                    <span className="text-sm text-gray-500">Total Amount:</span>
-                    <span className="font-medium text-lg ml-2">
-                      ${proposal.quoteAmount}
-                    </span>
-                  </div>
-                  <div className="flex gap-2">
-                    <Link href={`/dashboard/student/proposals/${proposal._id}`}>
-                      <Button variant="outline" size="sm" className="h-8">
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          className="h-4 w-4 mr-1"
-                          viewBox="0 0 20 20"
-                          fill="currentColor"
-                        >
-                          <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
-                          <path
-                            fillRule="evenodd"
-                            d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z"
-                            clipRule="evenodd"
-                          />
-                        </svg>
-                        View Details
-                      </Button>
-                    </Link>
-                    <Link
-                      href={`/dashboard/student/jobs/${proposal.jobId._id}`}
-                    >
-                      <Button variant="outline" size="sm" className="h-8">
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          className="h-4 w-4 mr-1"
-                          viewBox="0 0 20 20"
-                          fill="currentColor"
-                        >
-                          <path
-                            fillRule="evenodd"
-                            d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                            clipRule="evenodd"
-                          />
-                        </svg>
-                        View Job
-                      </Button>
-                    </Link>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
-
       {/* Contract Review Modal */}
       <Dialog open={showContractModal} onOpenChange={setShowContractModal}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -943,7 +962,6 @@ export default function StudentProposalsPage() {
                 new Date(currentContract.createdAt).toLocaleDateString()}
             </DialogDescription>
           </DialogHeader>
-
           <div className="prose max-w-none border rounded-lg p-6 bg-gray-50 my-4">
             <div
               dangerouslySetInnerHTML={{
@@ -951,7 +969,6 @@ export default function StudentProposalsPage() {
               }}
             />
           </div>
-
           <DialogFooter className="flex gap-2">
             <Button
               variant="outline"
@@ -989,7 +1006,6 @@ export default function StudentProposalsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
       {/* Change Request Modal */}
       <Dialog
         open={showChangeRequestModal}
@@ -1002,7 +1018,6 @@ export default function StudentProposalsPage() {
               Describe the changes you would like to request for this contract.
             </DialogDescription>
           </DialogHeader>
-
           <Textarea
             placeholder="Please describe the changes you would like to request..."
             value={changeRequestMessage}
@@ -1010,7 +1025,6 @@ export default function StudentProposalsPage() {
             rows={4}
             className="my-4"
           />
-
           <DialogFooter className="flex gap-2">
             <Button
               variant="outline"
