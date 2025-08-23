@@ -1,36 +1,110 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# FreelanceHub - Student Freelance Marketplace
 
-## Getting Started
+A modern freelance marketplace connecting students with businesses for project collaboration.
 
-First, run the development server:
+## Features
+
+- **User Authentication**: Secure JWT-based authentication
+- **Job Management**: Create, browse, and manage freelance jobs
+- **Proposal System**: Students can submit proposals for jobs
+- **Contract Management**: Full contract lifecycle with e-signatures
+- **Payment Integration**: Razorpay payment gateway integration
+- **Real-time Updates**: Auto-refresh and status tracking
+
+## Setup Instructions
+
+### 1. Install Dependencies
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Environment Variables
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Create a `.env.local` file in the root directory:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+# Database
+MONGODB_URI=your_mongodb_connection_string
 
-## Learn More
+# JWT
+JWT_SECRET=your_jwt_secret_key
 
-To learn more about Next.js, take a look at the following resources:
+# Razorpay (Optional - for production payments)
+RAZORPAY_KEY_ID=your_razorpay_key_id
+RAZORPAY_KEY_SECRET=your_razorpay_key_secret
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+# OpenAI (Optional - for AI contract generation)
+OPENAI_API_KEY=your_openai_api_key
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 3. Payment Setup
 
-## Deploy on Vercel
+#### Option A: Production (Razorpay)
+1. Sign up for a Razorpay account
+2. Get your API keys from the dashboard
+3. Add them to `.env.local`
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+#### Option B: Development (Test Payments)
+- No setup required
+- The system will automatically use test payments when Razorpay is not configured
+- Perfect for development and testing
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### 4. Run the Application
+
+```bash
+# Development
+npm run dev
+
+# Production
+npm run build
+npm start
+```
+
+## Contract Flow
+
+1. **Proposal Submission**: Student submits proposal for a job
+2. **Proposal Review**: Business reviews and accepts/rejects proposals
+3. **Contract Creation**: Business creates contract for accepted proposals
+4. **Student Review**: Student reviews and approves contract
+5. **Payment**: Business makes payment through Razorpay
+6. **E-Signatures**: Both parties sign the contract digitally
+7. **Project Execution**: Work begins with signed contract
+
+## API Endpoints
+
+### Contracts
+- `POST /api/contracts` - Create new contract
+- `GET /api/contracts` - List contracts
+- `GET /api/contracts/[id]` - Get contract details
+- `PUT /api/contracts/[id]` - Update contract
+- `POST /api/contracts/[id]/payment` - Process payment
+- `POST /api/contracts/[id]/sign` - Save e-signature
+
+### Proposals
+- `GET /api/proposals` - List proposals
+- `PUT /api/proposals/[id]` - Update proposal status
+
+## Development Notes
+
+- The system automatically detects if Razorpay is configured
+- Test payments are available in development mode
+- E-signatures are stored as base64 encoded images
+- Real-time updates every 30 seconds
+- Responsive design with Tailwind CSS
+
+## Troubleshooting
+
+### Payment Issues
+- Check if Razorpay keys are properly configured
+- Verify contract status is 'approved' before payment
+- Ensure user has proper authorization
+
+### Signature Issues
+- Payment must be completed before signing
+- Both parties must sign for contract completion
+- Check browser console for any JavaScript errors
+
+## License
+
+MIT License - see LICENSE file for details

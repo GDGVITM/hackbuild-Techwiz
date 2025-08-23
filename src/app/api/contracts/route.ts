@@ -2,10 +2,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db/mongoose';
 import Contract from '@/lib/models/Contract';
+import Proposal from '@/lib/models/Proposal';
+import jwt from 'jsonwebtoken';
 
 export async function POST(request: NextRequest) {
   try {
     await dbConnect();
+    
+    // Verify JWT token
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json(
+        { error: 'Authorization token is required' },
+        { status: 401 }
+      );
+    }
+    
+    const token = authHeader.substring(7);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
+    const userId = decoded.userId;
     
     const body = await request.json();
     
@@ -20,8 +35,21 @@ export async function POST(request: NextRequest) {
       }
     }
     
+    // Verify the businessId matches the authenticated user
+    if (body.businessId !== userId) {
+      return NextResponse.json(
+        { error: 'You can only create contracts for your own business' },
+        { status: 403 }
+      );
+    }
+    
     // Create the contract
     const contract = await Contract.create(body);
+    
+    // Update the proposal with the contract ID
+    await Proposal.findByIdAndUpdate(body.proposalId, {
+      contractId: contract._id
+    });
     
     return NextResponse.json({
       success: true,
@@ -30,6 +58,15 @@ export async function POST(request: NextRequest) {
     
   } catch (error: any) {
     console.error('Error creating contract:', error);
+    
+    // Handle JWT errors
+    if (error.name === 'JsonWebTokenError') {
+      return NextResponse.json(
+        { error: 'Invalid token' },
+        { status: 401 }
+      );
+    }
+    
     return NextResponse.json(
       { error: error.message || 'Failed to create contract' },
       { status: 500 }
@@ -41,15 +78,18 @@ export async function GET(request: NextRequest) {
   try {
     await dbConnect();
     
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
-    
-    if (!userId) {
+    // Verify JWT token
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json(
-        { error: 'User ID is required' },
-        { status: 400 }
+        { error: 'Authorization token is required' },
+        { status: 401 }
       );
     }
+    
+    const token = authHeader.substring(7);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
+    const userId = decoded.userId;
     
     const contracts = await Contract.find({
       $or: [
@@ -65,6 +105,15 @@ export async function GET(request: NextRequest) {
     
   } catch (error: any) {
     console.error('Error fetching contracts:', error);
+    
+    // Handle JWT errors
+    if (error.name === 'JsonWebTokenError') {
+      return NextResponse.json(
+        { error: 'Invalid token' },
+        { status: 401 }
+      );
+    }
+    
     return NextResponse.json(
       { error: error.message || 'Failed to fetch contracts' },
       { status: 500 }

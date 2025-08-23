@@ -5,7 +5,7 @@ import { verifyToken } from '@/lib/auth/jwt';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const token = request.headers.get('Authorization')?.replace('Bearer ', '');
@@ -14,11 +14,12 @@ export async function GET(
     }
 
     const { userId } = verifyToken(token);
-    const proposalId = params.id;
+    const { id: proposalId } = await params;
 
     const proposal = await Proposal.findById(proposalId)
       .populate('jobId', 'title description businessId')
-      .populate('studentId', 'name email');
+      .populate('studentId', 'name email')
+      .populate('contractId');
 
     if (!proposal) {
       return NextResponse.json({ error: 'Proposal not found' }, { status: 404 });
@@ -31,7 +32,7 @@ export async function GET(
     }
 
     // Allow access if user is the student who submitted the proposal or the business owner
-    if (proposal.studentId._id !== userId && job.businessId.toString() !== userId) {
+    if (proposal.studentId._id.toString() !== userId && job.businessId.toString() !== userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
@@ -43,7 +44,7 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const token = request.headers.get('Authorization')?.replace('Bearer ', '');
@@ -52,7 +53,7 @@ export async function PUT(
     }
 
     const { userId, role } = verifyToken(token);
-    const proposalId = params.id;
+    const { id: proposalId } = await params;
     const { status, reason } = await request.json();
 
     const proposal = await Proposal.findById(proposalId);

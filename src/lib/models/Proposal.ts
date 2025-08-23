@@ -9,6 +9,13 @@ const milestoneSchema = new Schema({
   status: { type: String, enum: ['pending', 'completed', 'overdue'], default: 'pending' }
 });
 
+const statusHistorySchema = new Schema({
+  status: { type: String, enum: ['pending', 'accepted', 'rejected', 'withdrawn'] },
+  changedAt: { type: Date, default: Date.now },
+  changedBy: { type: Schema.Types.ObjectId, ref: 'User' }, // who changed the status
+  reason: { type: String } // reason for status change
+});
+
 const proposalSchema = new Schema({
   jobId: { type: Schema.Types.ObjectId, ref: 'Job', required: true },
   studentId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
@@ -29,12 +36,7 @@ const proposalSchema = new Schema({
   studentNotes: { type: String }, // notes from student
   
   // Timestamps for status changes
-  statusHistory: [{
-    status: { type: String, enum: ['pending', 'accepted', 'rejected', 'withdrawn'] },
-    changedAt: { type: Date, default: Date.now },
-    changedBy: { type: Schema.Types.ObjectId, ref: 'User' }, // who changed the status
-    reason: { type: String } // reason for status change
-  }],
+  statusHistory: [statusHistorySchema],
   
   // Contract details (when accepted)
   contractId: { type: Schema.Types.ObjectId, ref: 'Contract' },
@@ -50,13 +52,12 @@ proposalSchema.index({ studentId: 1, status: 1 });
 proposalSchema.index({ submittedAt: -1 });
 proposalSchema.index({ quoteAmount: 1 });
 proposalSchema.index({ 'statusHistory.changedAt': -1 });
+proposalSchema.index({ contractId: 1 }); // Add index for contractId
 
 // Pre-save middleware to track status changes
 proposalSchema.pre('save', function(next) {
   if (this.isModified('status')) {
-    if (!this.statusHistory) {
-      this.statusHistory = [];
-    }
+    // Mongoose will handle the array initialization automatically
     this.statusHistory.push({
       status: this.status,
       changedAt: new Date(),
@@ -76,6 +77,12 @@ proposalSchema.methods.isWithinBudget = function(jobBudgetMin: number, jobBudget
   return this.quoteAmount >= jobBudgetMin && this.quoteAmount <= jobBudgetMax;
 };
 
+// Method to update contract ID when contract is created
+proposalSchema.methods.updateContractId = function(contractId: Schema.Types.ObjectId) {
+  this.contractId = contractId;
+  return this.save();
+};
+
 // Static method to get proposals by status
 proposalSchema.statics.findByStatus = function(status: string) {
   return this.find({ status });
@@ -84,6 +91,14 @@ proposalSchema.statics.findByStatus = function(status: string) {
 // Static method to get proposals for a specific job
 proposalSchema.statics.findByJob = function(jobId: string) {
   return this.find({ jobId }).populate('studentId', 'name email');
+};
+
+// Static method to get proposals with contracts
+proposalSchema.statics.findWithContracts = function() {
+  return this.find({ contractId: { $exists: true, $ne: null } })
+    .populate('contractId')
+    .populate('studentId', 'name email')
+    .populate('jobId');
 };
 
 export default mongoose.models.Proposal || mongoose.model('Proposal', proposalSchema);
