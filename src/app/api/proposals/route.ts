@@ -1,8 +1,8 @@
 // src/app/api/proposals/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import Proposal from '@/lib/models/Proposal';
-import Job from '@/lib/models/Job';
+import { Proposal, Job } from '@/lib/models';
 import { verifyToken } from '@/lib/auth/jwt';
+import dbConnect from '@/lib/db/mongoose';
 
 interface MilestoneData {
   title: string;
@@ -23,6 +23,9 @@ interface QueryParams {
 
 export async function GET(request: NextRequest) {
   try {
+    // Connect to database
+    await dbConnect();
+    
     const token = request.headers.get('Authorization')?.replace('Bearer ', '');
     if (!token) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -100,6 +103,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    // Connect to database
+    await dbConnect();
+    
     const token = request.headers.get('Authorization')?.replace('Bearer ', '');
     if (!token) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

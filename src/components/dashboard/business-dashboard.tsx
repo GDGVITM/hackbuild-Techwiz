@@ -68,8 +68,14 @@ interface ChatMessage {
 }
 
 interface ChatConversation {
+  id: string;
   applicationId: string;
   applicantName: string;
+  company: string;
+  jobTitle: string;
+  lastMessage: string;
+  timestamp: string;
+  unread: number;
   messages: ChatMessage[];
 }
 
@@ -82,7 +88,6 @@ export default function BusinessDashboard() {
   const [error, setError] = useState('');
   const [chatConversations, setChatConversations] = useState<ChatConversation[]>([]);
   const [newMessage, setNewMessage] = useState("");
-  // In your business dashboard component
   const [selectedProposal, setSelectedProposal] = useState<JobApplication | null>(null);
   const [selectedChat, setSelectedChat] = useState<string | null>(null);
   const [newJobPost, setNewJobPost] = useState({
@@ -98,32 +103,50 @@ export default function BusinessDashboard() {
   const jobPostsPerPage = 5;
   const { token } = useAuth();
 
+  // Fetch chats function
+  const fetchChats = async () => {
+    if (!token) return;
+    try {
+      const response = await fetch('/api/chats', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setChatConversations(data.chats);
+      }
+    } catch (error) {
+      console.error('Failed to fetch chats:', error);
+    }
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        
+
         // Fetch jobs
         const jobsResponse = await fetch('/api/jobs', {
           headers: {
             'Authorization': `Bearer ${token}`,
           },
         });
-        
+
         if (jobsResponse.ok) {
           const jobsData = await jobsResponse.json();
           setJobs(jobsData.jobs);
         } else {
           setError('Failed to fetch jobs');
         }
-        
+
         // Fetch proposals
         const proposalsResponse = await fetch('/api/proposals', {
           headers: {
             'Authorization': `Bearer ${token}`,
           },
         });
-        
+
         if (proposalsResponse.ok) {
           const proposalsData = await proposalsResponse.json();
           setProposals(proposalsData.proposals);
@@ -138,6 +161,9 @@ export default function BusinessDashboard() {
     };
 
     fetchData();
+    
+    // Fetch chats
+    fetchChats();
   }, [token]);
 
   const handleJobCreated = (newJob: Job) => {
@@ -157,11 +183,38 @@ export default function BusinessDashboard() {
       });
 
       if (response.ok) {
-        setProposals((prev) => 
-          prev.map((proposal) => 
+        setProposals((prev) =>
+          prev.map((proposal) =>
             proposal._id === proposalId ? { ...proposal, status: newStatus } : proposal
           )
         );
+
+        // If accepted, create a chat room for this proposal
+        if (newStatus === 'accepted') {
+          try {
+            const chatResponse = await fetch('/api/chats', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                name: `Chat for ${proposal.jobId.title}`,
+                participants: [proposal.studentId._id, proposal.jobId.businessId]
+              }),
+            });
+            
+            if (chatResponse.ok) {
+              // Refresh chats
+              await fetchChats();
+            }
+          } catch (error) {
+            console.error('Failed to create chat room:', error);
+          }
+        }
+      } else {
+        const errorData = await response.json();
+        console.error('Failed to update proposal status:', errorData);
       }
     } catch (error) {
       console.error('Failed to update proposal status:', error);
@@ -230,40 +283,40 @@ export default function BusinessDashboard() {
     }
   };
 
-  const handleSendMessage = (applicationId: string) => {
-    if (!newMessage.trim()) return;
-    
-    const message: ChatMessage = {
-      id: Date.now().toString(),
-      senderId: "business",
-      senderName: "Business User",
-      message: newMessage,
-      timestamp: new Date().toISOString(),
-      isFromBusiness: true,
-    };
-    
-    setChatConversations((prev) => {
-      const existingConv = prev.find(conv => conv.applicationId === applicationId);
-      
-      if (existingConv) {
-        return prev.map(conv => 
-          conv.applicationId === applicationId 
-            ? { ...conv, messages: [...conv.messages, message] } 
-            : conv
-        );
-      } else {
-        return [
-          ...prev,
-          {
-            applicationId,
-            applicantName: proposals.find(p => p._id === applicationId)?.studentId.name || '',
-            messages: [message]
-          }
-        ];
+  const handleSendMessage = async (applicationId: string) => {
+    if (!newMessage.trim() || !token) return;
+
+    try {
+      // Find the chat room for this application
+      const chatRoom = chatConversations.find(conv => conv.applicationId === applicationId);
+      if (!chatRoom) {
+        console.error('Chat room not found for application:', applicationId);
+        return;
       }
-    });
-    
-    setNewMessage("");
+
+      // Send message via API
+      const response = await fetch(`/api/chats/${chatRoom.id}/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          text: newMessage,
+          type: 'text'
+        }),
+      });
+
+      if (response.ok) {
+        // Refresh chats to get updated messages
+        await fetchChats();
+        setNewMessage("");
+      } else {
+        console.error('Failed to send message');
+      }
+    } catch (error) {
+      console.error('Failed to send message:', error);
+    }
   };
 
   const getAcceptedApplications = () => {
@@ -300,7 +353,7 @@ export default function BusinessDashboard() {
     onPageChange: (page: number) => void;
   }) => {
     if (totalPages <= 1) return null;
-    
+
     return (
       <div className="flex items-center justify-between mt-4">
         <div className="text-sm text-muted-foreground">
@@ -372,7 +425,7 @@ export default function BusinessDashboard() {
             </Button>
           </nav>
         </aside>
-        
+
         {/* Main Content */}
         <main className="flex-1 p-6">
           <Tabs defaultValue="proposals" className="w-full">
@@ -381,13 +434,13 @@ export default function BusinessDashboard() {
               <TabsTrigger value="jobs">Job Posts</TabsTrigger>
               <TabsTrigger value="chat">Chat</TabsTrigger>
             </TabsList>
-            
+
             <TabsContent value="proposals" className="space-y-6">
               <div>
                 <h2 className="text-2xl font-bold mb-2">Job Proposals</h2>
                 <p className="text-muted-foreground">Review and manage student proposals for your job postings</p>
               </div>
-              
+
               {/* Stats Cards */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Card>
@@ -418,7 +471,7 @@ export default function BusinessDashboard() {
                   </CardContent>
                 </Card>
               </div>
-              
+
               {/* Proposals Table */}
               <Card>
                 <CardHeader>
@@ -545,7 +598,7 @@ export default function BusinessDashboard() {
                 </CardContent>
               </Card>
             </TabsContent>
-            
+
             <TabsContent value="jobs" className="space-y-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -557,7 +610,7 @@ export default function BusinessDashboard() {
                   Create Job Post
                 </Button>
               </div>
-              
+
               {showCreateForm && (
                 <Card>
                   <CardHeader>
@@ -568,7 +621,7 @@ export default function BusinessDashboard() {
                   </CardContent>
                 </Card>
               )}
-              
+
               <div className="grid gap-4">
                 {getPaginatedJobPosts().map((job) => (
                   <Card key={job._id}>
@@ -601,20 +654,20 @@ export default function BusinessDashboard() {
                   </Card>
                 ))}
               </div>
-              
+
               <PaginationControls
                 currentPage={jobPostsPage}
                 totalPages={getTotalJobPostsPages()}
                 onPageChange={setJobPostsPage}
               />
             </TabsContent>
-            
+
             <TabsContent value="chat" className="space-y-6">
               <div>
                 <h2 className="text-2xl font-bold mb-2">Chat with Accepted Candidates</h2>
                 <p className="text-muted-foreground">Communicate with students who have been accepted for positions</p>
               </div>
-              
+
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[600px]">
                 {/* Chat List */}
                 <Card className="lg:col-span-1">
@@ -626,9 +679,8 @@ export default function BusinessDashboard() {
                       {getAcceptedApplications().map((app) => (
                         <div
                           key={app._id}
-                          className={`p-3 cursor-pointer hover:bg-muted/50 border-b ${
-                            selectedChat === app._id ? "bg-muted" : ""
-                          }`}
+                          className={`p-3 cursor-pointer hover:bg-muted/50 border-b ${selectedChat === app._id ? "bg-muted" : ""
+                            }`}
                           onClick={() => setSelectedChat(app._id)}
                         >
                           <div className="flex items-center gap-3">
@@ -651,7 +703,7 @@ export default function BusinessDashboard() {
                     </div>
                   </CardContent>
                 </Card>
-                
+
                 {/* Chat Window */}
                 <Card className="lg:col-span-2">
                   {selectedChat ? (
@@ -672,9 +724,8 @@ export default function BusinessDashboard() {
                                   className={`flex ${message.isFromBusiness ? "justify-end" : "justify-start"}`}
                                 >
                                   <div
-                                    className={`max-w-[70%] p-3 rounded-lg ${
-                                      message.isFromBusiness ? "bg-primary text-primary-foreground" : "bg-muted"
-                                    }`}
+                                    className={`max-w-[70%] p-3 rounded-lg ${message.isFromBusiness ? "bg-primary text-primary-foreground" : "bg-muted"
+                                      }`}
                                   >
                                     <p className="text-sm">{message.message}</p>
                                     <p className="text-xs opacity-70 mt-1">

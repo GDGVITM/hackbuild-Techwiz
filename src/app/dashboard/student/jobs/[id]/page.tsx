@@ -24,19 +24,24 @@ export default function JobDetailsPage() {
         setLoading(true);
         setError(null);
         
+        console.log('Fetching job with ID:', jobId);
+        
         // Fetch job details
         const jobResponse = await fetch(`/api/jobs/${jobId}`);
         
         if (!jobResponse.ok) {
           const errorData = await jobResponse.json().catch(() => ({ error: 'Unknown error' }));
-          throw new Error(errorData.error || `HTTP error! status: ${jobResponse.status}`);
+          console.error('Job API error:', errorData);
+          throw new Error(errorData.error || errorData.details || `HTTP error! status: ${jobResponse.status}`);
         }
         
         const jobData = await jobResponse.json();
+        console.log('Job data received:', jobData);
         setJob(jobData.job);
         
         // Check if student has already applied
         if (user?.role === 'student' && token) {
+          console.log('Checking for existing proposals...');
           const proposalsResponse = await fetch('/api/proposals', {
             headers: {
               'Authorization': `Bearer ${token}`,
@@ -45,6 +50,7 @@ export default function JobDetailsPage() {
           
           if (proposalsResponse.ok) {
             const proposalsData = await proposalsResponse.json();
+            console.log('Proposals data:', proposalsData);
             const userProposal = proposalsData.proposals?.find(
               (p: any) => p.jobId === jobId
             );
@@ -53,6 +59,8 @@ export default function JobDetailsPage() {
               setHasApplied(true);
               setProposalStatus(userProposal.status);
             }
+          } else {
+            console.error('Proposals API error:', proposalsResponse.status);
           }
         }
       } catch (error) {
@@ -63,12 +71,49 @@ export default function JobDetailsPage() {
       }
     };
 
-    fetchJobAndProposalStatus();
+    if (jobId) {
+      fetchJobAndProposalStatus();
+    }
   }, [jobId, user, token]);
 
-  if (loading) return <div className="text-center py-10">Loading job details...</div>;
-  if (error) return <div className="text-center py-10 text-red-600">{error}</div>;
-  if (!job) return <div className="text-center py-10">Job not found</div>;
+  if (loading) return (
+    <div className="text-center py-10">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+      <p>Loading job details...</p>
+    </div>
+  );
+  
+  if (error) return (
+    <div className="text-center py-10">
+      <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md mx-auto">
+        <h3 className="text-red-800 font-semibold mb-2">Error Loading Job</h3>
+        <p className="text-red-600 mb-4">{error}</p>
+        <div className="text-sm text-red-500">
+          <p>Please check:</p>
+          <ul className="list-disc list-inside mt-2">
+            <li>Database connection is working</li>
+            <li>Job ID is valid</li>
+            <li>You have proper permissions</li>
+          </ul>
+        </div>
+        <button 
+          onClick={() => window.location.reload()} 
+          className="mt-4 bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+        >
+          Try Again
+        </button>
+      </div>
+    </div>
+  );
+  
+  if (!job) return (
+    <div className="text-center py-10">
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 max-w-md mx-auto">
+        <h3 className="text-yellow-800 font-semibold mb-2">Job Not Found</h3>
+        <p className="text-yellow-600">The job you're looking for doesn't exist or has been removed.</p>
+      </div>
+    </div>
+  );
 
   return (
     <div className="container mx-auto px-4 py-8">

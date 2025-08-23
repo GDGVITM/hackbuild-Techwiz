@@ -1,8 +1,6 @@
 "use client";
-import Proposal from "@/lib/models/Proposal";
 import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { Job } from "@/types/job";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -51,6 +49,32 @@ import {
   Briefcase,
 } from "lucide-react";
 
+// Define types based on the actual model structures
+interface Job {
+  _id: string;
+  title: string;
+  description: string;
+  company?: string;
+  companyLogo?: string;
+  location?: string;
+  budgetMin: number;
+  budgetMax: number;
+  duration?: string;
+  skillsRequired: string[];
+  status: string;
+  businessId: string;
+}
+
+interface Proposal {
+  _id: string;
+  jobId: string;
+  studentId: string;
+  coverLetter: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface ChatConversation {
   id: string;
   company: string;
@@ -74,7 +98,7 @@ export default function StudentDashboard() {
   const [chats, setChats] = useState<ChatConversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  
+
   // UI State
   const [activeTab, setActiveTab] = useState("explore");
   const [searchTerm, setSearchTerm] = useState("");
@@ -88,11 +112,11 @@ export default function StudentDashboard() {
   const [applicationsCurrentPage, setApplicationsCurrentPage] = useState(1);
   const [selectedChat, setSelectedChat] = useState<ChatConversation | null>(null);
   const [newMessage, setNewMessage] = useState("");
-  
+
   // Filter states
   const [skillFilter, setSkillFilter] = useState<string>("all");
   const [budgetFilter, setBudgetFilter] = useState<string>("all");
-  
+
   const jobsPerPage = 5;
   const applicationsPerPage = 5;
 
@@ -150,14 +174,56 @@ export default function StudentDashboard() {
         const data = await response.json();
         if (response.ok) {
           setChats(data.chats);
+          
+          // If no chats exist, create a demo chat room
+          if (data.chats.length === 0) {
+            try {
+              const createResponse = await fetch("/api/chats", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${token}`,
+                },
+                                 body: JSON.stringify({
+                   name: "Welcome Chat",
+                   participants: ["507f1f77bcf86cd799439011"] // Use valid ObjectId format
+                 }),
+              });
+              if (createResponse.ok) {
+                // Refresh chats to show the new one
+                const refreshResponse = await fetch("/api/chats", {
+                  headers: { Authorization: `Bearer ${token}` }
+                });
+                const refreshData = await refreshResponse.json();
+                if (refreshResponse.ok) {
+                  setChats(refreshData.chats);
+                }
+              }
+            } catch (err) {
+              console.error("Failed to create demo chat:", err);
+            }
+          }
+        } else {
+          console.error('Chats fetch error:', data);
+          setError(data.error || "Failed to fetch chats");
         }
       } catch (err) {
-        console.error("Failed to fetch chats:", err);
+        console.error('Chats fetch exception:', err);
+        setError("An error occurred while fetching chats. Please try again.");
       }
     };
     fetchChats();
   }, [token]);
-
+  
+  // Debug: Log chats state changes
+  useEffect(() => {
+    console.log('Chats state updated:', chats);
+    console.log('Chats length:', chats.length);
+    if (chats.length > 0) {
+      console.log('First chat:', chats[0]);
+    }
+  }, [chats]);
+  
   // Filter and search jobs
   const filteredJobs = jobs.filter((job) => {
     // Filter by search term
@@ -168,11 +234,11 @@ export default function StudentDashboard() {
       job.skillsRequired.some((skill) =>
         skill.toLowerCase().includes(searchTerm.toLowerCase())
       );
-    
+
     // Filter by skill
     const matchesSkill =
       skillFilter === "all" || job.skillsRequired.includes(skillFilter);
-    
+
     // Filter by budget
     let matchesBudget = true;
     if (budgetFilter !== "all") {
@@ -180,7 +246,7 @@ export default function StudentDashboard() {
       const avgBudget = (job.budgetMin + job.budgetMax) / 2;
       matchesBudget = avgBudget >= min && avgBudget <= max;
     }
-    
+
     return matchesSearch && matchesSkill && matchesBudget;
   });
 
@@ -211,8 +277,8 @@ export default function StudentDashboard() {
   };
 
   // Create a set of job IDs that the student has already applied to
-  const appliedJobIds = useMemo(() => 
-    new Set(proposals.map((p) => p.jobId)), 
+  const appliedJobIds = useMemo(() =>
+    new Set(proposals.map((p) => p.jobId)),
     [proposals]
   );
 
@@ -297,7 +363,7 @@ export default function StudentDashboard() {
         const updatedMessages = [
           ...selectedChat.messages,
           {
-            id: selectedChat.messages.length + 1,
+            id: Date.now().toString(), // Use timestamp as string ID
             sender: "student",
             content: newMessage,
             timestamp: new Date().toISOString(),
@@ -314,10 +380,10 @@ export default function StudentDashboard() {
           chats.map((chat) =>
             chat.id === selectedChat.id
               ? {
-                  ...chat,
-                  lastMessage: newMessage,
-                  timestamp: new Date().toISOString(),
-                }
+                ...chat,
+                lastMessage: newMessage,
+                timestamp: new Date().toISOString(),
+              }
               : chat
           )
         );
@@ -415,7 +481,7 @@ export default function StudentDashboard() {
               <span>Messages</span>
             </TabsTrigger>
           </TabsList>
-          
+
           {/* Explore Jobs Tab */}
           <TabsContent value="explore" className="space-y-6">
             <div className="flex items-center space-x-4">
@@ -429,7 +495,7 @@ export default function StudentDashboard() {
                 />
               </div>
             </div>
-            
+
             {/* Filters */}
             <div className="bg-white rounded-lg shadow-sm border p-4 mb-6">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -485,7 +551,7 @@ export default function StudentDashboard() {
                 </div>
               </div>
             </div>
-            
+
             {/* Results Summary */}
             <div className="mb-6">
               <p className="text-gray-600">
@@ -493,7 +559,7 @@ export default function StudentDashboard() {
                 {searchTerm && ` matching "${searchTerm}"`}
               </p>
             </div>
-            
+
             <div className="grid gap-6">
               {currentJobs.map((job) => {
                 const hasApplied = appliedJobIds.has(job._id);
@@ -548,8 +614,8 @@ export default function StudentDashboard() {
                                 proposalStatus === "accepted"
                                   ? "default"
                                   : proposalStatus === "rejected"
-                                  ? "destructive"
-                                  : "secondary"
+                                    ? "destructive"
+                                    : "secondary"
                               }
                               className={
                                 proposalStatus === "accepted"
@@ -560,8 +626,8 @@ export default function StudentDashboard() {
                               {proposalStatus === "accepted"
                                 ? "Accepted"
                                 : proposalStatus === "rejected"
-                                ? "Rejected"
-                                : "Pending"}
+                                  ? "Rejected"
+                                  : "Pending"}
                             </Badge>
                           )}
                           <Dialog>
@@ -658,7 +724,7 @@ export default function StudentDashboard() {
                 );
               })}
             </div>
-            
+
             {/* Jobs Pagination */}
             {totalJobsPages > 1 && (
               <div className="flex items-center justify-center space-x-2">
@@ -698,7 +764,7 @@ export default function StudentDashboard() {
               </div>
             )}
           </TabsContent>
-          
+
           {/* My Applications Tab */}
           <TabsContent value="applications" className="space-y-6">
             <div className="flex justify-between items-center mb-6">
@@ -708,13 +774,48 @@ export default function StudentDashboard() {
                   Track your job applications and their status
                 </p>
               </div>
-              <Link href="/dashboard/student/proposals">
-                <Button variant="outline">
-                  View All Proposals 
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  onClick={async () => {
+                    if (!token) return;
+                    try {
+                      const response = await fetch("/api/chats", {
+                        method: "POST",
+                        headers: {
+                          "Content-Type": "application/json",
+                          Authorization: `Bearer ${token}`,
+                        },
+                        body: JSON.stringify({
+                          name: "Test Chat Room",
+                          participants: [/* studentId */, businessId]
+                        }),
+                      });
+                      if (response.ok) {
+                        // Refresh chats
+                        const chatsResponse = await fetch("/api/chats", {
+                          headers: { Authorization: `Bearer ${token}` }
+                        });
+                        const chatsData = await chatsResponse.json();
+                        if (chatsResponse.ok) {
+                          setChats(chatsData.chats);
+                        }
+                      }
+                    } catch (err) {
+                      console.error("Failed to create test chat:", err);
+                    }
+                  }}
+                >
+                  Create Test Chat
                 </Button>
-              </Link>
+                <Link href="/dashboard/student/proposals">
+                  <Button variant="outline">
+                    View All Proposals
+                  </Button>
+                </Link>
+              </div>
             </div>
-            
+
             {/* Status Summary */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
               <Card>
@@ -758,7 +859,7 @@ export default function StudentDashboard() {
                 </CardContent>
               </Card>
             </div>
-            
+
             {/* Proposals List */}
             {currentApplications.length === 0 ? (
               <div className="text-center py-16">
@@ -845,7 +946,7 @@ export default function StudentDashboard() {
                 })}
               </div>
             )}
-            
+
             {/* Applications Pagination */}
             {totalApplicationsPages > 1 && (
               <div className="flex items-center justify-center space-x-2">
@@ -890,28 +991,72 @@ export default function StudentDashboard() {
               </div>
             )}
           </TabsContent>
-          
+
           {/* Messages Tab */}
           <TabsContent value="chat" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[600px]">
               {/* Chat List */}
               <Card className="lg:col-span-1">
                 <CardHeader>
-                  <CardTitle className="text-lg">Messages</CardTitle>
-                  <CardDescription>
-                    Chat with companies that accepted your applications
-                  </CardDescription>
+                                  <CardTitle className="text-lg">Messages</CardTitle>
+                <CardDescription>
+                  Chat with companies that accepted your applications
+                </CardDescription>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      // First create a test chat room using POST
+                      const response = await fetch("/api/test-chat", {
+                        method: "POST",
+                        headers: {
+                          "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                          name: "Test Chat Room"
+                        })
+                      });
+                      const data = await response.json();
+                      console.log("Test chat response:", data);
+                      
+                      if (data.success) {
+                        // Now refresh chats to see the new one
+                        if (token) {
+                          const chatsResponse = await fetch("/api/chats", {
+                            headers: { Authorization: `Bearer ${token}` }
+                          });
+                          const chatsData = await chatsResponse.json();
+                          if (chatsResponse.ok) {
+                            setChats(chatsData.chats);
+                            console.log("Updated chats:", chatsData.chats);
+                          }
+                        }
+                      }
+                    } catch (err) {
+                      console.error("Failed to create test chat:", err);
+                    }
+                  }}
+                >
+                  Create Test Data
+                </Button>
                 </CardHeader>
                 <CardContent className="p-0">
                   <ScrollArea className="h-[500px]">
-                    {chats.map((conversation) => (
+                    {chats.length === 0 ? (
+                      <div className="p-4 text-center text-gray-500">
+                        <MessageCircle className="w-8 h-8 mx-auto mb-2" />
+                        <p>No chats yet</p>
+                        <p className="text-sm">Chats will appear here when you have conversations</p>
+                      </div>
+                    ) : (
+                      chats.map((conversation) => (
                       <div
                         key={conversation.id}
-                        className={`p-4 border-b cursor-pointer hover:bg-slate-50 ${
-                          selectedChat?.id === conversation.id
-                            ? "bg-indigo-50 border-indigo-200"
-                            : ""
-                        }`}
+                        className={`p-4 border-b cursor-pointer hover:bg-slate-50 ${selectedChat?.id === conversation.id
+                          ? "bg-indigo-50 border-indigo-200"
+                          : ""
+                          }`}
                         onClick={() => setSelectedChat(conversation)}
                       >
                         <div className="flex items-center justify-between mb-2">
@@ -936,11 +1081,12 @@ export default function StudentDashboard() {
                           ).toLocaleDateString()}
                         </p>
                       </div>
-                    ))}
+                    ))
+                    )}
                   </ScrollArea>
                 </CardContent>
               </Card>
-              
+
               {/* Chat Window */}
               <Card className="lg:col-span-2">
                 {selectedChat ? (
@@ -957,26 +1103,23 @@ export default function StudentDashboard() {
                           {selectedChat.messages.map((message) => (
                             <div
                               key={message.id}
-                              className={`flex ${
-                                message.sender === "student"
-                                  ? "justify-end"
-                                  : "justify-start"
-                              }`}
+                              className={`flex ${message.sender === "student"
+                                ? "justify-end"
+                                : "justify-start"
+                                }`}
                             >
                               <div
-                                className={`max-w-[70%] p-3 rounded-lg ${
-                                  message.sender === "student"
-                                    ? "bg-indigo-600 text-white"
-                                    : "bg-slate-100 text-slate-900"
-                                }`}
+                                className={`max-w-[70%] p-3 rounded-lg ${message.sender === "student"
+                                  ? "bg-indigo-600 text-white"
+                                  : "bg-slate-100 text-slate-900"
+                                  }`}
                               >
                                 <p className="text-sm">{message.content}</p>
                                 <p
-                                  className={`text-xs mt-1 ${
-                                    message.sender === "student"
-                                      ? "text-indigo-200"
-                                      : "text-slate-500"
-                                  }`}
+                                  className={`text-xs mt-1 ${message.sender === "student"
+                                    ? "text-indigo-200"
+                                    : "text-slate-500"
+                                    }`}
                                 >
                                   {new Date(
                                     message.timestamp
@@ -1020,7 +1163,7 @@ export default function StudentDashboard() {
           </TabsContent>
         </Tabs>
       </div>
-      
+
       {/* Application Form Dialog */}
       {selectedJob && (
         <Dialog open={!!selectedJob} onOpenChange={() => setSelectedJob(null)}>

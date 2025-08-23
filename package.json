@@ -26,6 +26,7 @@
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.1",
+    "firebase": "^12.1.0",
     "framer-motion": "^12.23.12",
     "js-cookie": "^3.0.5",
     "jsonwebtoken": "^9.0.2",
