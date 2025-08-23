@@ -6,7 +6,7 @@ import jwt from 'jsonwebtoken';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Verify JWT token
@@ -19,7 +19,7 @@ export async function GET(
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
     const userId = decoded.userId;
     
-    const contractId = params.id;
+  const { id: contractId } = await params;
     
     await dbConnect();
     
@@ -69,7 +69,7 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Verify JWT token
@@ -82,7 +82,7 @@ export async function PUT(
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
     const userId = decoded.userId;
     
-    const contractId = params.id;
+  const { id: contractId } = await params;
     const body = await request.json();
     
     await dbConnect();
