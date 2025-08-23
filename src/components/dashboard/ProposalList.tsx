@@ -212,41 +212,6 @@ export default function ProposalList({ jobId, status }: ProposalListProps) {
     }
   };
 
-  // Function to update contract with changes
-  const handleUpdateContract = async (contractId: string) => {
-    try {
-      const response = await fetch(`/api/contracts/${contractId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          ...contractForm,
-          status: 'pending' // Reset to pending for student review
-        }),
-      });
-      
-      if (response.ok) {
-        toast({
-          title: 'Contract updated',
-          description: 'The updated contract has been sent to the student for review.',
-        });
-        
-        // Close dialog and refresh data
-        setCreateContractFor(null);
-        fetchProposals();
-      }
-    } catch (error) {
-      console.error('Error updating contract:', error);
-      toast({
-        title: 'Failed to update contract',
-        description: error instanceof Error ? error.message : 'Failed to update contract.',
-        variant: 'destructive',
-      });
-    }
-  };
-
   // Function to handle payment
   const handlePayment = async (contractId: string) => {
     try {
@@ -277,6 +242,41 @@ export default function ProposalList({ jobId, status }: ProposalListProps) {
       toast({
         title: 'Payment failed',
         description: error instanceof Error ? error.message : 'Failed to process payment.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Function to update contract with changes
+  const handleUpdateContract = async (contractId: string) => {
+    try {
+      const response = await fetch(`/api/contracts/${contractId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          ...contractForm,
+          status: 'pending' // Reset to pending for student review
+        }),
+      });
+      
+      if (response.ok) {
+        toast({
+          title: 'Contract updated',
+          description: 'The updated contract has been sent to the student for review.',
+        });
+        
+        // Close dialog and refresh data
+        setCreateContractFor(null);
+        fetchProposals();
+      }
+    } catch (error) {
+      console.error('Error updating contract:', error);
+      toast({
+        title: 'Failed to update contract',
+        description: error instanceof Error ? error.message : 'Failed to update contract.',
         variant: 'destructive',
       });
     }
@@ -746,9 +746,16 @@ export default function ProposalList({ jobId, status }: ProposalListProps) {
                     {/* Add this to your proposal card for accepted proposals with contracts */}
                     {proposal.status === 'accepted' && proposal.contractId && typeof proposal.contractId !== 'string' && (
                       <div className="mt-2">
-                        <Badge variant={proposal.contractId.status === 'approved' ? 'default' : 'secondary'}>
+                        <Badge variant={
+                          proposal.contractId.status === 'approved' ? 'default' : 
+                          proposal.contractId.status === 'changes_requested' ? 'destructive' :
+                          proposal.contractId.status === 'signed' ? 'secondary' :
+                          proposal.contractId.status === 'completed' ? 'outline' : 'secondary'
+                        }>
                           Contract: {proposal.contractId.status}
                         </Badge>
+                        
+                        {/* Show payment button when contract is approved and payment is pending */}
                         {proposal.contractId.status === 'approved' && proposal.contractId.paymentStatus === 'pending' && (
                           <Button 
                             size="sm" 
@@ -758,6 +765,15 @@ export default function ProposalList({ jobId, status }: ProposalListProps) {
                             Make Payment
                           </Button>
                         )}
+                        
+                        {/* Show payment status when payment is completed */}
+                        {proposal.contractId.paymentStatus === 'paid' && (
+                          <Badge variant="outline" className="ml-2">
+                            Payment: Paid
+                          </Badge>
+                        )}
+                        
+                        {/* Show review changes button when student requests changes */}
                         {proposal.contractId.status === 'changes_requested' && (
                           <Button 
                             size="sm" 
@@ -770,6 +786,19 @@ export default function ProposalList({ jobId, status }: ProposalListProps) {
                           >
                             Review Changes
                           </Button>
+                        )}
+                        
+                        {/* Show project status when contract is signed or completed */}
+                        {proposal.contractId.status === 'signed' && (
+                          <Badge variant="secondary" className="ml-2">
+                            Project: In Progress
+                          </Badge>
+                        )}
+                        
+                        {proposal.contractId.status === 'completed' && (
+                          <Badge variant="outline" className="ml-2">
+                            Project: Completed
+                          </Badge>
                         )}
                       </div>
                     )}

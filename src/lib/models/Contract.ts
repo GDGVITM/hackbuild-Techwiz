@@ -71,12 +71,12 @@ const contractSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending_student_review', 'approved', 'rejected', 'in_progress', 'completed', 'cancelled'],
-    default: 'pending_student_review'
+    enum: ['pending', 'approved', 'changes_requested', 'signed', 'completed'],
+    default: 'pending'
   },
   paymentStatus: {
     type: String,
-    enum: ['pending', 'partial', 'completed'],
+    enum: ['pending', 'paid'],
     default: 'pending'
   },
   razorpayOrderId: {
