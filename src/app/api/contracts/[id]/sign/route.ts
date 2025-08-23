@@ -20,7 +20,15 @@ export async function POST(
     const userId = decoded.userId;
     
     const contractId = params.id;
-    const body = await request.json();
+    const { signature, signatureType } = await request.json();
+    
+    if (!signature || !signatureType) {
+      return NextResponse.json({ error: 'Signature and signatureType are required' }, { status: 400 });
+    }
+    
+    if (!['business', 'student'].includes(signatureType)) {
+      return NextResponse.json({ error: 'Invalid signatureType. Must be "business" or "student"' }, { status: 400 });
+    }
     
     await dbConnect();
     
@@ -31,72 +39,59 @@ export async function POST(
       return NextResponse.json({ error: 'Contract not found' }, { status: 404 });
     }
     
-    // Verify the user is authorized to sign this contract
-    if (contract.businessId.toString() !== userId && contract.studentId.toString() !== userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+    // Verify the user is authorized to sign
+    if (signatureType === 'business' && contract.businessId.toString() !== userId) {
+      return NextResponse.json({ error: 'Only the business owner can sign as business' }, { status: 403 });
     }
     
-    // Check if contract is ready for signing (payment completed)
-    if (contract.paymentStatus !== 'paid') {
-      return NextResponse.json({ 
-        error: 'Contract must be paid before it can be signed' 
-      }, { status: 400 });
+    if (signatureType === 'student' && contract.studentId.toString() !== userId) {
+      return NextResponse.json({ error: 'Only the student can sign as student' }, { status: 403 });
     }
     
-    const { signature, signatureType } = body;
-    
-    if (!signature || !signatureType) {
-      return NextResponse.json({ 
-        error: 'Signature and signatureType are required' 
-      }, { status: 400 });
+    // Check if payment is completed
+    if (contract.paymentStatus !== 'completed') {
+      return NextResponse.json({ error: 'Payment must be completed before signing' }, { status: 400 });
     }
     
-    if (!['business', 'student'].includes(signatureType)) {
-      return NextResponse.json({ 
-        error: 'Invalid signatureType. Must be "business" or "student"' 
-      }, { status: 400 });
+    // Check if already signed
+    if (signatureType === 'business' && contract.businessSignature) {
+      return NextResponse.json({ error: 'Business has already signed this contract' }, { status: 400 });
     }
     
-    // Update the appropriate signature field
+    if (signatureType === 'student' && contract.studentSignature) {
+      return NextResponse.json({ error: 'Student has already signed this contract' }, { status: 400 });
+    }
+    
+    // Save the signature
     if (signatureType === 'business') {
-      if (contract.businessId.toString() !== userId) {
-        return NextResponse.json({ 
-          error: 'Only the business owner can sign as business' 
-        }, { status: 403 });
-      }
-      
       contract.businessSignature = signature;
       contract.businessSignedAt = new Date();
     } else {
-      if (contract.studentId.toString() !== userId) {
-        return NextResponse.json({ 
-          error: 'Only the student can sign as student' 
-        }, { status: 403 });
-      }
-      
       contract.studentSignature = signature;
       contract.studentSignedAt = new Date();
     }
     
-    // Check if both parties have signed
+    // Update contract status to signed if both parties have signed
     if (contract.businessSignature && contract.studentSignature) {
       contract.status = 'signed';
     }
     
     contract.updatedAt = new Date();
-    await contract.save();
     
-    // Populate the updated contract
-    const updatedContract = await Contract.findById(contractId)
-      .populate('proposalId')
-      .populate('jobId')
-      .populate('businessId')
-      .populate('studentId');
+    // Save the contract
+    await contract.save();
     
     return NextResponse.json({
       success: true,
-      message: 'Signature saved successfully',
-      contract: updatedContract
+      message: `${signatureType} signature saved successfully`,
+      contract: {
+        id: contract._id,
+        status: contract.status,
+        businessSignature: contract.businessSignature ? 'signed' : 'pending',
+        studentSignature: contract.studentSignature ? 'signed' : 'pending',
+        businessSignedAt: contract.businessSignedAt,
+        studentSignedAt: contract.studentSignedAt
+      }
     });
     
   } catch (error: any) {
