@@ -16,31 +16,38 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to fetch jobs' }, { status: 500 });
   }
 }
-
 export async function POST(request: NextRequest) {
   try {
-    // Connect to the database
     await dbConnect();
-
-    const { title, description, budget, deadline, skills, businessId } = await request.json();
-
+    
+    // Update the expected fields to match the frontend
+    const { 
+      title, 
+      description, 
+      budgetMin, 
+      budgetMax, 
+      skillsRequired, 
+      milestones,
+      businessId
+    } = await request.json();
+    
     // Validate input
-    if (!title || !description || !budget || !deadline || !businessId) {
+    if (!title || !description || !budgetMin || !budgetMax || !businessId) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
-
-    // Create new job
+    
+    // Create new job with the correct fields
     const job = new Job({
       title,
       description,
-      budget,
-      deadline,
-      skills: skills || [],
+      budgetMin: Number(budgetMin),
+      budgetMax: Number(budgetMax),
+      skills: skillsRequired || [],
+      milestones: milestones || [],
       businessId
     });
-
+    
     await job.save();
-
     return NextResponse.json({ job }, { status: 201 });
   } catch (error) {
     console.error('Error creating job:', error);
