@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db/mongoose';
 import Contract from '@/lib/models/Contract';
+import Proposal from '@/lib/models/Proposal';
 import jwt from 'jsonwebtoken';
 
 export async function POST(request: NextRequest) {
@@ -44,6 +45,11 @@ export async function POST(request: NextRequest) {
     
     // Create the contract
     const contract = await Contract.create(body);
+    
+    // Update the proposal with the contract ID
+    await Proposal.findByIdAndUpdate(body.proposalId, {
+      contractId: contract._id
+    });
     
     return NextResponse.json({
       success: true,

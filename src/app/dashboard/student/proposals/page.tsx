@@ -57,7 +57,7 @@ interface Proposal {
       _id: string;
       name: string;
     };
-  };
+  } | null;
   coverLetter: string;
   milestones: Array<{
     title: string;
@@ -67,7 +67,7 @@ interface Proposal {
   quoteAmount: number;
   status: "pending" | "accepted" | "rejected" | "withdrawn";
   submittedAt: string;
-  contract?: Contract;
+  contract?: Contract | null;
 }
 
 export default function StudentProposalsPage() {
@@ -102,7 +102,6 @@ export default function StudentProposalsPage() {
           Authorization: `Bearer ${token}`,
         },
       });
-
       if (!response.ok) {
         const errorData = await response
           .json()
@@ -111,7 +110,6 @@ export default function StudentProposalsPage() {
           errorData.error || `HTTP error! status: ${response.status}`
         );
       }
-
       const data = await response.json();
       const newProposals = data.proposals || [];
 
@@ -127,16 +125,16 @@ export default function StudentProposalsPage() {
             let notificationType: "success" | "error" | "warning" | "info" =
               "info";
             let title = "Proposal Status Updated";
-            let message = `Your proposal for "${newProposal.jobId.title}" status changed from ${oldProposal.status} to ${newProposal.status}.`;
+            let message = `Your proposal status changed from ${oldProposal.status} to ${newProposal.status}.`;
 
             if (newProposal.status === "accepted") {
               notificationType = "success";
               title = "🎉 Proposal Accepted!";
-              message = `Congratulations! Your proposal for "${newProposal.jobId.title}" has been accepted!`;
+              message = `Congratulations! Your proposal has been accepted!`;
             } else if (newProposal.status === "rejected") {
               notificationType = "warning";
               title = "Proposal Not Selected";
-              message = `Your proposal for "${newProposal.jobId.title}" was not selected. Don't worry, there are many other opportunities!`;
+              message = `Your proposal was not selected. Don't worry, there are many other opportunities!`;
             }
 
             setNotification({
@@ -160,16 +158,16 @@ export default function StudentProposalsPage() {
             let notificationType: "success" | "error" | "warning" | "info" =
               "info";
             let title = "Contract Status Updated";
-            let message = `The contract for "${newProposal.jobId.title}" status changed to ${newProposal.contract.status}.`;
+            let message = `The contract status changed to ${newProposal.contract.status}.`;
 
             if (newProposal.contract.status === "signed") {
               notificationType = "success";
               title = "🎉 Contract Signed!";
-              message = `Your contract for "${newProposal.jobId.title}" has been signed!`;
+              message = `Your contract has been signed!`;
             } else if (newProposal.contract.status === "changes_requested") {
               notificationType = "warning";
               title = "Changes Requested";
-              message = `The business has requested changes to the contract for "${newProposal.jobId.title}".`;
+              message = `The business has requested changes to the contract.`;
             }
 
             setNotification({
@@ -208,20 +206,16 @@ export default function StudentProposalsPage() {
           Authorization: `Bearer ${token}`,
         },
       });
-
       if (!response.ok) {
         throw new Error("Failed to accept contract");
       }
-
       // Refresh proposals to get updated contract status
       fetchProposals();
-
       setNotification({
         title: "Contract Accepted",
         message: "You have successfully accepted the contract.",
         type: "success",
       });
-
       // Auto-hide notification after 10 seconds
       setTimeout(() => {
         setNotification(null);
@@ -233,7 +227,6 @@ export default function StudentProposalsPage() {
         message: "Failed to accept contract. Please try again.",
         type: "error",
       });
-
       // Auto-hide notification after 10 seconds
       setTimeout(() => {
         setNotification(null);
@@ -245,7 +238,6 @@ export default function StudentProposalsPage() {
 
   const handleRequestChanges = async () => {
     if (!currentContract || !changeRequestMessage.trim()) return;
-
     setContractActionLoading(currentContract._id);
     try {
       const response = await fetch(
@@ -259,25 +251,20 @@ export default function StudentProposalsPage() {
           body: JSON.stringify({ message: changeRequestMessage }),
         }
       );
-
       if (!response.ok) {
         throw new Error("Failed to request changes");
       }
-
       // Close modal and reset
       setShowChangeRequestModal(false);
       setCurrentContract(null);
       setChangeRequestMessage("");
-
       // Refresh proposals
       fetchProposals();
-
       setNotification({
         title: "Change Request Sent",
         message: "Your change request has been sent to the business.",
         type: "info",
       });
-
       // Auto-hide notification after 10 seconds
       setTimeout(() => {
         setNotification(null);
@@ -289,7 +276,6 @@ export default function StudentProposalsPage() {
         message: "Failed to send change request. Please try again.",
         type: "error",
       });
-
       // Auto-hide notification after 10 seconds
       setTimeout(() => {
         setNotification(null);
@@ -328,25 +314,28 @@ export default function StudentProposalsPage() {
   // Filter and sort proposals
   useEffect(() => {
     let filtered = proposals;
+
     // Filter by status
     if (statusFilter !== "all") {
       filtered = filtered.filter(
         (proposal) => proposal.status === statusFilter
       );
     }
+
     // Filter by search term
     if (searchTerm) {
       filtered = filtered.filter(
         (proposal) =>
-          proposal.jobId.title
+          (proposal.jobId?.title || "")
             .toLowerCase()
             .includes(searchTerm.toLowerCase()) ||
-          proposal.jobId.businessId.name
+          (proposal.jobId?.businessId.name || "")
             .toLowerCase()
             .includes(searchTerm.toLowerCase()) ||
           proposal.coverLetter.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
+
     // Sort proposals
     filtered.sort((a, b) => {
       switch (sortBy) {
@@ -358,13 +347,14 @@ export default function StudentProposalsPage() {
         case "quoteAmount":
           return b.quoteAmount - a.quoteAmount;
         case "jobTitle":
-          return a.jobId.title.localeCompare(b.jobId.title);
+          return (a.jobId?.title || "").localeCompare(b.jobId?.title || "");
         case "status":
           return a.status.localeCompare(b.status);
         default:
           return 0;
       }
     });
+
     setFilteredProposals(filtered);
   }, [proposals, searchTerm, statusFilter, sortBy]);
 
@@ -446,6 +436,14 @@ export default function StudentProposalsPage() {
   if (proposals.length === 0) {
     return (
       <div className="container mx-auto px-4 py-8">
+        <div className="mb-4">
+          <Link href="/dashboard/student" className="inline-flex items-center text-sm text-gray-600 hover:text-gray-900">
+            <svg xmlns="http://www.w3.org/2000/svg" className="mr-2 h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+            </svg>
+            Back to Dashboard
+          </Link>
+        </div>
         <h1 className="text-2xl font-bold mb-6">My Proposals</h1>
         <div className="text-center py-16">
           <div className="mb-4">
@@ -465,6 +463,15 @@ export default function StudentProposalsPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
+      <div className="mb-4">
+        <Link href="/dashboard/student" className="inline-flex items-center text-sm text-gray-600 hover:text-gray-900">
+          <svg xmlns="http://www.w3.org/2000/svg" className="mr-2 h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+          </svg>
+          Back to Dashboard
+        </Link>
+      </div>
+
       <h1 className="text-2xl font-bold mb-6">My Proposals</h1>
 
       {/* Status Change Notification */}
@@ -589,11 +596,11 @@ export default function StudentProposalsPage() {
                         href={`/dashboard/student/proposals/${proposal._id}`}
                         className="hover:text-blue-600"
                       >
-                        {proposal.jobId.title}
+                        {proposal.jobId?.title || "Unknown Job"}
                       </Link>
                     </CardTitle>
                     <CardDescription>
-                      {proposal.jobId.businessId.name} • Submitted on{" "}
+                      {proposal.jobId?.businessId.name || "Unknown Business"} • Submitted on{" "}
                       {new Date(proposal.submittedAt).toLocaleDateString()}
                     </CardDescription>
                   </div>
@@ -692,8 +699,8 @@ export default function StudentProposalsPage() {
                                         : "outline"
                                     }
                                     className={`text-xs ${cr.status === "resolved"
-                                        ? "bg-green-100 text-green-800"
-                                        : "text-orange-700 border-orange-300"
+                                      ? "bg-green-100 text-green-800"
+                                      : "text-orange-700 border-orange-300"
                                       }`}
                                   >
                                     {cr.status === "resolved"
@@ -794,6 +801,7 @@ export default function StudentProposalsPage() {
                               </>
                             )}
                           </Button>
+
                           <Button
                             size="sm"
                             variant="outline"
@@ -904,25 +912,28 @@ export default function StudentProposalsPage() {
                         View Details
                       </Button>
                     </Link>
-                    <Link
-                      href={`/dashboard/student/jobs/${proposal.jobId._id}`}
-                    >
-                      <Button variant="outline" size="sm" className="h-8">
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          className="h-4 w-4 mr-1"
-                          viewBox="0 0 20 20"
-                          fill="currentColor"
-                        >
-                          <path
-                            fillRule="evenodd"
-                            d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                            clipRule="evenodd"
-                          />
-                        </svg>
-                        View Job
-                      </Button>
-                    </Link>
+
+                    {proposal.jobId && (
+                      <Link
+                        href={`/dashboard/student/jobs/${proposal.jobId._id}`}
+                      >
+                        <Button variant="outline" size="sm" className="h-8">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            className="h-4 w-4 mr-1"
+                            viewBox="0 0 20 20"
+                            fill="currentColor"
+                          >
+                            <path
+                              fillRule="evenodd"
+                              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
+                          View Job
+                        </Button>
+                      </Link>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -942,7 +953,6 @@ export default function StudentProposalsPage() {
                 new Date(currentContract.createdAt).toLocaleDateString()}
             </DialogDescription>
           </DialogHeader>
-
           <div className="prose max-w-none border rounded-lg p-6 bg-gray-50 my-4">
             <div
               dangerouslySetInnerHTML={{
@@ -950,7 +960,6 @@ export default function StudentProposalsPage() {
               }}
             />
           </div>
-
           <DialogFooter className="flex gap-2">
             <Button
               variant="outline"
@@ -1001,7 +1010,6 @@ export default function StudentProposalsPage() {
               Describe the changes you would like to request for this contract.
             </DialogDescription>
           </DialogHeader>
-
           <Textarea
             placeholder="Please describe the changes you would like to request..."
             value={changeRequestMessage}
@@ -1009,7 +1017,6 @@ export default function StudentProposalsPage() {
             rows={4}
             className="my-4"
           />
-
           <DialogFooter className="flex gap-2">
             <Button
               variant="outline"
