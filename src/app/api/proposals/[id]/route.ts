@@ -3,10 +3,11 @@ import { getUserFromRequest, createUnauthorizedResponse, createForbiddenResponse
 import Proposal from '@/lib/models/Proposal';
 import Job from '@/lib/models/Job';
 import dbConnect from '@/lib/db/mongoose';
+import { verifyToken } from '@/lib/auth/jwt';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = getUserFromRequest(request);
@@ -15,11 +16,12 @@ export async function GET(
     }
 
     await dbConnect();
-    const proposalId = params.id;
+    const proposalId = params._id;
 
     const proposal = await Proposal.findById(proposalId)
       .populate('jobId', 'title description businessId')
-      .populate('studentId', 'name email');
+      .populate('studentId', 'name email')
+      .populate('contractId');
 
     if (!proposal) {
       return NextResponse.json({ error: 'Proposal not found' }, { status: 404 });
@@ -32,8 +34,8 @@ export async function GET(
     }
 
     // Allow access if user is the student who submitted the proposal or the business owner
-    if (proposal.studentId._id !== user.userId && job.businessId.toString() !== user.userId) {
-      return createForbiddenResponse('Unauthorized to view this proposal');
+    if (proposal.studentId._id.toString() !== userId && job.businessId.toString() !== userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
     return NextResponse.json({ proposal });
@@ -44,7 +46,7 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = getUserFromRequest(request);
@@ -52,8 +54,8 @@ export async function PUT(
       return createUnauthorizedResponse('Authentication required');
     }
 
-    await dbConnect();
-    const proposalId = params.id;
+    const { userId, role } = verifyToken(token);
+    const { id: proposalId } = await params;
     const { status, reason } = await request.json();
 
     const proposal = await Proposal.findById(proposalId);

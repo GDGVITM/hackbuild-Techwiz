@@ -85,6 +85,8 @@ export default function BusinessDashboard() {
   const [authChecking, setAuthChecking] = useState(true);
   const [chatConversations, setChatConversations] = useState<ChatConversation[]>([]);
   const [newMessage, setNewMessage] = useState("");
+  // In your business dashboard component
+  const [selectedProposal, setSelectedProposal] = useState<JobApplication | null>(null);
   const [selectedChat, setSelectedChat] = useState<string | null>(null);
   const [newJobPost, setNewJobPost] = useState({
     title: "",

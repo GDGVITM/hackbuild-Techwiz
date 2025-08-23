@@ -7,10 +7,10 @@ import dbConnect from '@/lib/db/mongoose';
 export async function GET(request: NextRequest) {
   try {
     console.log('Jobs API - Starting request...');
-    
+
     let user = getUserFromRequest(request);
     console.log('Jobs API - User from headers:', user);
-    
+
     if (!user) {
       console.log('Jobs API - No user from headers, trying token verification...');
       const payload = await verifyAuthToken(request);
@@ -52,53 +52,39 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to fetch jobs' }, { status: 500 });
   }
 }
-
-// POST new job (only business)
 export async function POST(request: NextRequest) {
   try {
-    let user = getUserFromRequest(request);
-    if (!user) {
-      const payload = await verifyAuthToken(request);
-      if (payload) {
-        user = { userId: payload.userId, role: payload.role as 'student' | 'business' };
-      }
-    }
-
-    if (!user) {
-      return createUnauthorizedResponse('Authentication required');
-    }
-
-    // Check if user is business
-    if (user.role !== 'business') {
-      return createForbiddenResponse('Only business users can create jobs');
-    }
-
-    const body = await request.json();
-    const { title, description, budgetMin, budgetMax, skillsRequired, milestones } = body;
-
-    if (!title || !description || !budgetMin || !budgetMax) {
-      return NextResponse.json(
-        { error: 'Title, description, and budget range are required' },
-        { status: 400 }
-      );
-    }
-
     await dbConnect();
 
-    const job = new Job({
+    // Update the expected fields to match the frontend
+    const {
       title,
       description,
       budgetMin,
       budgetMax,
-      skillsRequired: skillsRequired || [],
+      skillsRequired,
+      milestones,
+      businessId
+    } = await request.json();
+
+    // Validate input
+    if (!title || !description || !budgetMin || !budgetMax || !businessId) {
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    }
+
+    // Create new job with the correct fields
+    const job = new Job({
+      title,
+      description,
+      budgetMin: Number(budgetMin),
+      budgetMax: Number(budgetMax),
+      skills: skillsRequired || [],
       milestones: milestones || [],
-      businessId: user.userId,
-      status: 'open'
+      businessId
     });
 
     await job.save();
-
-    return NextResponse.json({ success: true, job }, { status: 201 });
+    return NextResponse.json({ job }, { status: 201 });
   } catch (error) {
     console.error('Error creating job:', error);
     return NextResponse.json({ error: 'Failed to create job' }, { status: 500 });

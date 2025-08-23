@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useState } from "react";
+import Proposal from "@/lib/models/Proposal";
+import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Job } from "@/types/job";
 import { useRouter } from "next/navigation";
@@ -110,6 +111,7 @@ export default function StudentDashboard() {
   // Filter states
   const [skillFilter, setSkillFilter] = useState<string>("all");
   const [budgetFilter, setBudgetFilter] = useState<string>("all");
+
   const jobsPerPage = 5;
   const applicationsPerPage = 5;
 
@@ -150,7 +152,7 @@ export default function StudentDashboard() {
   // Fetch proposals
   useEffect(() => {
     const fetchProposals = async () => {
-      if (!isAuthenticated || !user || !token) return;
+      if (!token) return;
       try {
         const response = await fetch("/api/proposals", {
           headers: {
@@ -171,7 +173,7 @@ export default function StudentDashboard() {
   // Fetch chats
   useEffect(() => {
     const fetchChats = async () => {
-      if (!isAuthenticated || !user || !token) return;
+      if (!token) return;
       try {
         const response = await fetch("/api/chats", {
           headers: {
@@ -201,8 +203,14 @@ export default function StudentDashboard() {
       ));
 
     // Filter by skill
+    // const matchesSkill =
+    //   skillFilter === "all" || (job.skillsRequired && job.skillsRequired.includes(skillFilter));
+
+    //   );
+
+    // Filter by skill
     const matchesSkill =
-      skillFilter === "all" || (job.skillsRequired && job.skillsRequired.includes(skillFilter));
+      skillFilter === "all" || job.skillsRequired.includes(skillFilter);
 
     // Filter by budget
     let matchesBudget = true;
@@ -222,16 +230,10 @@ export default function StudentDashboard() {
   const currentJobs = filteredJobs.slice(jobsStartIndex, jobsEndIndex);
 
   // Pagination logic for applications
-  const totalApplicationsPages = Math.ceil(
-    proposals.length / applicationsPerPage
-  );
-  const applicationsStartIndex =
-    (applicationsCurrentPage - 1) * applicationsPerPage;
+  const totalApplicationsPages = Math.ceil(proposals.length / applicationsPerPage);
+  const applicationsStartIndex = (applicationsCurrentPage - 1) * applicationsPerPage;
   const applicationsEndIndex = applicationsStartIndex + applicationsPerPage;
-  const currentApplications = proposals.slice(
-    applicationsStartIndex,
-    applicationsEndIndex
-  );
+  const currentApplications = proposals.slice(applicationsStartIndex, applicationsEndIndex);
 
   // Get unique skills from all jobs
   const getAllSkills = () => {
@@ -250,7 +252,10 @@ export default function StudentDashboard() {
   };
 
   // Create a set of job IDs that the student has already applied to
-  const appliedJobIds = new Set(proposals.map((p) => p.jobId));
+  const appliedJobIds = useMemo(() =>
+    new Set(proposals.map((p) => p.jobId)),
+    [proposals]
+  );
 
   // Get the status of a proposal for a specific job
   const getProposalStatus = (jobId: string) => {
@@ -261,6 +266,14 @@ export default function StudentDashboard() {
   // Handle job application
   const handleApplyToJob = (job: Job) => {
     router.push(`/dashboard/student/jobs/${job._id}?action=submit`);
+  };
+
+  // Handle viewing contract
+  const handleViewContract = (jobId: string) => {
+    const proposal = proposals.find(p => p.jobId === jobId);
+    if (proposal) {
+      router.push(`/dashboard/student/proposals/${proposal._id}`);
+    }
   };
 
   // Submit application
@@ -460,6 +473,7 @@ export default function StudentDashboard() {
             </TabsTrigger>
           </TabsList>
 
+
           {/* Explore Jobs Tab */}
           <TabsContent value="explore" className="space-y-6">
             <div className="flex items-center space-x-4">
@@ -650,9 +664,15 @@ export default function StudentDashboard() {
                                     >
                                       Apply Now
                                     </Button>
+                                  ) : proposalStatus === 'accepted' ? (
+                                    <Button
+                                      onClick={() => handleViewContract(job._id)}
+                                    >
+                                      View Contract
+                                    </Button>
                                   ) : (
                                     <Button variant="outline" disabled>
-                                      Already Applied
+                                      Applied
                                     </Button>
                                   )}
                                 </div>
@@ -662,6 +682,12 @@ export default function StudentDashboard() {
                           {!hasApplied ? (
                             <Button onClick={() => handleApplyToJob(job)}>
                               Apply Now
+                            </Button>
+                          ) : proposalStatus === 'accepted' ? (
+                            <Button
+                              onClick={() => handleViewContract(job._id)}
+                            >
+                              View Contract
                             </Button>
                           ) : (
                             <Button variant="outline" disabled>
@@ -730,6 +756,7 @@ export default function StudentDashboard() {
               </div>
             )}
           </TabsContent>
+
 
           {/* My Applications Tab */}
           <TabsContent value="applications" className="space-y-6">
@@ -855,6 +882,13 @@ export default function StudentDashboard() {
                                 View Details
                               </Button>
                             </Link>
+                            {application.status === 'accepted' && (
+                              <Link href={`/dashboard/student/proposals/${application._id}`}>
+                                <Button variant="outline" size="sm">
+                                  View Contract
+                                </Button>
+                              </Link>
+                            )}
                             <Link
                               href={`/dashboard/student/jobs/${application.jobId}`}
                             >
@@ -915,6 +949,7 @@ export default function StudentDashboard() {
               </div>
             )}
           </TabsContent>
+
 
           {/* Messages Tab */}
           <TabsContent value="chat" className="space-y-6">

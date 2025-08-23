@@ -7,8 +7,9 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Calendar, DollarSign, Clock, Users, ArrowLeft, Edit, Eye } from 'lucide-react';
 import { Job } from '@/types/job';
-import ProposalList from '@/components/business/ProposalList';
+// import ProposalList from '@/components/business/ProposalList';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
+import ProposalList from '@/components/dashboard/ProposalList';
 
 function BusinessJobDetailsPage() {
   const params = useParams();
@@ -23,16 +24,16 @@ function BusinessJobDetailsPage() {
       try {
         setLoading(true);
         setError(null);
-        
+
         const response = await fetch(`/api/jobs/${jobId}`, {
           credentials: 'include'
         });
-        
+
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
           throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
         }
-        
+
         const data = await response.json();
         setJob(data.job);
       } catch (error) {
@@ -69,7 +70,7 @@ function BusinessJobDetailsPage() {
       </div>
     );
   }
-  
+
   if (error) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -84,7 +85,7 @@ function BusinessJobDetailsPage() {
       </div>
     );
   }
-  
+
   if (!job) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -103,15 +104,15 @@ function BusinessJobDetailsPage() {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-6">
-        <Button 
-          onClick={() => router.back()} 
-          variant="outline" 
+        <Button
+          onClick={() => router.back()}
+          variant="outline"
           className="mb-4"
         >
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back to Jobs
         </Button>
-        
+
         <div className="flex justify-between items-start">
           <div>
             <h1 className="text-3xl font-bold mb-2">{job.title}</h1>
@@ -126,7 +127,7 @@ function BusinessJobDetailsPage() {
               </div>
             </div>
           </div>
-          
+
           <div className="flex gap-2">
             <Badge className={getStatusColor(job.status)}>
               {job.status === 'open' ? 'Open' : 'Closed'}

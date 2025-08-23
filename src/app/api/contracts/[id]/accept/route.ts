@@ -1,10 +1,10 @@
-// src/app/api/contracts/[id]/route.ts
+// src/app/api/contracts/[id]/accept/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db/mongoose';
 import Contract from '@/lib/models/Contract';
 import jwt from 'jsonwebtoken';
 
-export async function GET(
+export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
@@ -23,37 +23,33 @@ export async function GET(
     
     await dbConnect();
     
-    // First, find the contract without populating for authorization check
+    // Find the contract
     const contract = await Contract.findById(contractId);
     
     if (!contract) {
       return NextResponse.json({ error: 'Contract not found' }, { status: 404 });
     }
     
-    // Verify the user is authorized to view this contract
-    // Compare with the string representation of the ObjectIds
-    if (contract.businessId.toString() !== userId && contract.studentId.toString() !== userId) {
-      console.log('Authorization failed:', {
-        userId,
-        businessId: contract.businessId.toString(),
-        studentId: contract.studentId.toString()
-      });
+    // Verify the student is authorized to accept this contract
+    if (contract.studentId.toString() !== userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
     
-    // If authorized, now populate the contract with related data
-    const populatedContract = await Contract.findById(contractId)
-      .populate('proposalId')
-      .populate('jobId')
-      .populate('businessId')
-      .populate('studentId');
+    // Update contract status
+    contract.status = 'approved'; // Use 'approved' status which is in the enum
+    contract.updatedAt = new Date();
+    await contract.save();
     
+    // Return updated contract
     return NextResponse.json({ 
       success: true, 
-      contract: populatedContract 
+      contract: {
+        ...contract.toObject(),
+        status: 'approved'
+      }
     });
   } catch (error: any) {
-    console.error('Error fetching contract:', error);
+    console.error('Error accepting contract:', error);
     
     // Handle JWT errors
     if (error.name === 'JsonWebTokenError') {
@@ -61,7 +57,7 @@ export async function GET(
     }
     
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch contract' },
+      { error: error.message || 'Failed to accept contract' },
       { status: 500 }
     );
   }

@@ -9,6 +9,13 @@ const milestoneSchema = new Schema({
   status: { type: String, enum: ['pending', 'completed', 'overdue'], default: 'pending' }
 });
 
+const statusHistorySchema = new Schema({
+  status: { type: String, enum: ['pending', 'accepted', 'rejected', 'withdrawn'] },
+  changedAt: { type: Date, default: Date.now },
+  changedBy: { type: Schema.Types.ObjectId, ref: 'User' }, // who changed the status
+  reason: { type: String } // reason for status change
+});
+
 const proposalSchema = new Schema({
   jobId: { type: Schema.Types.ObjectId, ref: 'Job', required: true },
   studentId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
@@ -29,12 +36,7 @@ const proposalSchema = new Schema({
   studentNotes: { type: String }, // notes from student
   
   // Timestamps for status changes
-  statusHistory: [{
-    status: { type: String, enum: ['pending', 'accepted', 'rejected', 'withdrawn'] },
-    changedAt: { type: Date, default: Date.now },
-    changedBy: { type: Schema.Types.ObjectId, ref: 'User' }, // who changed the status
-    reason: { type: String } // reason for status change
-  }],
+  statusHistory: [statusHistorySchema],
   
   // Contract details (when accepted)
   contractId: { type: Schema.Types.ObjectId, ref: 'Contract' },
@@ -54,9 +56,7 @@ proposalSchema.index({ 'statusHistory.changedAt': -1 });
 // Pre-save middleware to track status changes
 proposalSchema.pre('save', function(next) {
   if (this.isModified('status')) {
-    if (!this.statusHistory) {
-      this.statusHistory = [];
-    }
+    // Mongoose will handle the array initialization automatically
     this.statusHistory.push({
       status: this.status,
       changedAt: new Date(),
