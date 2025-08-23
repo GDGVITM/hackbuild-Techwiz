@@ -36,7 +36,7 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
   useEffect(() => {
     const total = milestones.reduce((sum, m) => sum + Number(m.amount), 0);
     setTotalMilestoneAmount(total);
-    
+
     // Update validation status
     if (total === 0 && !quoteAmount) {
       setValidationStatus('empty');
@@ -68,20 +68,22 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
 
   const distributeEvenly = () => {
     if (!quoteAmount || milestones.length === 0) return;
-    
+
     const amountPerMilestone = Number(quoteAmount) / milestones.length;
     const updatedMilestones = milestones.map(milestone => ({
       ...milestone,
       amount: parseFloat(amountPerMilestone.toFixed(2))
     }));
-    
+
     setMilestones(updatedMilestones);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
+
     e.preventDefault();
     setError('');
     setLoading(true);
+    console.log('Token in ProposalForm:', token);
 
     try {
       if (!token) {
@@ -110,6 +112,7 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         credentials: 'include',
         body: JSON.stringify(proposalData),
@@ -158,7 +161,7 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
             {error}
           </div>
         )}
-        
+
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <Label htmlFor="coverLetter">Cover Letter</Label>
@@ -172,7 +175,7 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
               required
             />
           </div>
-          
+
           <div>
             <Label htmlFor="quoteAmount">Total Quote Amount ($)</Label>
             <Input
@@ -185,7 +188,7 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
               required
             />
           </div>
-          
+
           <div>
             <div className="flex justify-between items-center mb-2">
               <Label>Milestones</Label>
@@ -198,7 +201,7 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
                 </Button>
               </div>
             </div>
-            
+
             {/* Validation Status */}
             <div className={`mb-4 p-3 rounded-md border ${getValidationColor()}`}>
               <div className="flex justify-between items-center">
@@ -208,7 +211,7 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
                 <span className="text-sm">{getValidationText()}</span>
               </div>
             </div>
-            
+
             {milestones.map((milestone, index) => (
               <div key={index} className="border rounded-md p-3 mb-3">
                 <div className="flex justify-between items-center mb-2">
@@ -224,7 +227,7 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
                     </Button>
                   )}
                 </div>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div>
                     <Label htmlFor={`milestone-title-${index}`}>Title</Label>
@@ -236,7 +239,7 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
                       required
                     />
                   </div>
-                  
+
                   <div>
                     <Label htmlFor={`milestone-amount-${index}`}>Amount ($)</Label>
                     <Input
@@ -249,7 +252,7 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
                       required
                     />
                   </div>
-                  
+
                   <div>
                     <Label htmlFor={`milestone-date-${index}`}>Due Date</Label>
                     <Input
@@ -264,10 +267,10 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
               </div>
             ))}
           </div>
-          
-          <Button 
-            type="submit" 
-            disabled={loading || validationStatus === 'invalid'} 
+
+          <Button
+            type="submit"
+            disabled={loading || validationStatus === 'invalid'}
             className="w-full"
           >
             {loading ? 'Submitting...' : 'Submit Proposal'}

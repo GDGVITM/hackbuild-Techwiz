@@ -26,10 +26,10 @@ interface QueryParams {
 export async function GET(request: NextRequest) {
   try {
     console.log('Proposals API - Starting request...');
-    
+
     let user = getUserFromRequest(request);
     console.log('Proposals API - User from headers:', user);
-    
+
     if (!user) {
       console.log('Proposals API - No user from headers, trying token verification...');
       const payload = await verifyAuthToken(request);
@@ -129,7 +129,13 @@ export async function GET(request: NextRequest) {
 // POST new proposal (only students)
 export async function POST(request: NextRequest) {
   try {
-    const user = getUserFromRequest(request);
+    let user = getUserFromRequest(request);
+    if (!user) {
+      const payload = await verifyAuthToken(request);
+      if (payload) {
+        user = { userId: payload.userId, role: payload.role as 'student' | 'business' };
+      }
+    }
     if (!user) {
       return createUnauthorizedResponse('Authentication required');
     }

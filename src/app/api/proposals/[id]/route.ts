@@ -7,16 +7,25 @@ import { verifyToken } from '@/lib/auth/jwt';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
+
   try {
-    const user = getUserFromRequest(request);
+    let user = getUserFromRequest(request);
+    if (!user) {
+      // Try to verify JWT from Authorization header or cookie
+      const { verifyAuthToken } = await import('@/lib/utils/auth');
+      const payload = await verifyAuthToken(request);
+      if (payload) {
+        user = { userId: payload.userId, role: payload.role as 'student' | 'business' };
+      }
+    }
     if (!user) {
       return createUnauthorizedResponse('Authentication required');
     }
 
     await dbConnect();
-    const proposalId = params._id;
+    const proposalId = params.id;
 
     const proposal = await Proposal.findById(proposalId)
       .populate('jobId', 'title description businessId')
@@ -34,7 +43,10 @@ export async function GET(
     }
 
     // Allow access if user is the student who submitted the proposal or the business owner
-    if (proposal.studentId._id.toString() !== userId && job.businessId.toString() !== userId) {
+    if (
+      proposal.studentId._id.toString() !== user.userId &&
+      job.businessId.toString() !== user.userId
+    ) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 

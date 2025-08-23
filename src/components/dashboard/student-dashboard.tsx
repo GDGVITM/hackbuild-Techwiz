@@ -115,6 +115,11 @@ interface Contract {
     title: string;
     description: string;
   } | null;
+  studentId?: {
+    _id: string;
+    name: string;
+    email: string;
+  } | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -151,7 +156,6 @@ export default function StudentDashboard() {
   const [showSignatureModal, setShowSignatureModal] = useState(false);
   const [currentContract, setCurrentContract] = useState<Contract | null>(null);
   const [isSavingSignature, setIsSavingSignature] = useState(false);
-
   const { toast } = useToast();
 
   const jobsPerPage = 5;
@@ -204,6 +208,7 @@ export default function StudentDashboard() {
         const data = await response.json();
         if (response.ok) {
           setProposals(data.proposals || []);
+          console.log("Fetched proposals:", data.proposals);
         }
       } catch (err) {
         console.error("Failed to fetch proposals:", err);
@@ -236,7 +241,6 @@ export default function StudentDashboard() {
   // Fetch all data (proposals and contracts)
   const fetchData = async () => {
     if (!token || !user) return;
-
     try {
       setLoading(true);
 
@@ -246,7 +250,6 @@ export default function StudentDashboard() {
           'Authorization': `Bearer ${token}`,
         },
       });
-
       if (proposalsResponse.ok) {
         const proposalsData = await proposalsResponse.json();
         setProposals(proposalsData.proposals || []);
@@ -258,16 +261,17 @@ export default function StudentDashboard() {
           'Authorization': `Bearer ${token}`,
         },
       });
-
       if (contractsResponse.ok) {
         const contractsData = await contractsResponse.json();
         // Filter contracts where current user is the student
         const studentContracts = contractsData.contracts?.filter(
-          (contract: Contract) => contract.businessId?._id === user?.id
+          (contract: Contract) => {
+            // Check if the student ID matches either in studentId field or other identifier
+            return contract.studentId?._id === user?.id;
+          }
         ) || [];
         setContracts(studentContracts);
       }
-
     } catch (error) {
       console.error('Failed to fetch data:', error);
     } finally {
@@ -294,7 +298,7 @@ export default function StudentDashboard() {
 
     // Filter by skill
     const matchesSkill =
-      skillFilter === "all" || job.skillsRequired.includes(skillFilter);
+      skillFilter === "all" || (job.skillsRequired && job.skillsRequired.includes(skillFilter));
 
     // Filter by budget
     let matchesBudget = true;
@@ -303,6 +307,7 @@ export default function StudentDashboard() {
       const avgBudget = ((job.budgetMin || 0) + (job.budgetMax || 0)) / 2;
       matchesBudget = avgBudget >= min && avgBudget <= max;
     }
+
     return matchesSearch && matchesSkill && matchesBudget;
   });
 
@@ -331,31 +336,30 @@ export default function StudentDashboard() {
 
   // Get job details for proposals
   const getJobDetails = (jobId: string) => {
+    if (!jobId) return null;
     return jobs.find((job) => job._id === jobId);
   };
 
   // Create a set of job IDs that the student has already applied to
-  const appliedJobIds = useMemo(() => {
-    const ids = new Set<string>();
-    proposals.forEach((p) => {
-      if (p.jobId) {
-        if (typeof p.jobId === 'string') {
-          ids.add(p.jobId);
-        } else if (p.jobId && p.jobId._id) {
-          ids.add(p.jobId._id);
-        }
+  const appliedJobIds = useMemo(() =>
+    new Set(proposals.filter(p => p.jobId).map((p) => {
+      if (typeof p.jobId === 'string') {
+        return p.jobId;
+      } else if (p.jobId && typeof p.jobId === 'object' && p.jobId._id) {
+        return p.jobId._id;
       }
-    });
-    return ids;
-  }, [proposals]);
+      return null;
+    }).filter(Boolean)),
+    [proposals]
+  );
 
   // Get the status of a proposal for a specific job
   const getProposalStatus = (jobId: string) => {
+    if (!jobId) return null;
     const proposal = proposals.find((p) => {
-      if (!p.jobId) return false;
       if (typeof p.jobId === 'string') {
         return p.jobId === jobId;
-      } else if (p.jobId && p.jobId._id) {
+      } else if (p.jobId && typeof p.jobId === 'object' && p.jobId._id) {
         return p.jobId._id === jobId;
       }
       return false;
@@ -379,7 +383,6 @@ export default function StudentDashboard() {
       }
       return false;
     });
-
     if (proposal) {
       router.push(`/dashboard/student/proposals/${proposal._id}`);
     }
@@ -393,7 +396,7 @@ export default function StudentDashboard() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           jobId: selectedJob._id,
@@ -402,11 +405,12 @@ export default function StudentDashboard() {
           availability: applicationForm.availability,
         }),
       });
+
       if (response.ok) {
         // Refresh proposals
         const proposalsResponse = await fetch("/api/proposals", {
           headers: {
-            Authorization: `Bearer ${token}`,
+            'Authorization': `Bearer ${token}`,
           },
         });
         const proposalsData = await proposalsResponse.json();
@@ -436,18 +440,19 @@ export default function StudentDashboard() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           content: newMessage,
         }),
       });
+
       if (response.ok) {
         // Update the selectedChat with the new message
         const updatedMessages = [
           ...selectedChat.messages,
           {
-            id: selectedChat.messages.length + 1,
+            id: (selectedChat.messages.length + 1).toString(),
             sender: "student",
             content: newMessage,
             timestamp: new Date().toISOString(),
@@ -490,7 +495,6 @@ export default function StudentDashboard() {
       'signed': 'outline',
       'completed': 'default'
     };
-
     return <Badge variant={variants[status] || 'secondary'}>{status}</Badge>;
   };
 
@@ -500,7 +504,6 @@ export default function StudentDashboard() {
       'partial': 'destructive',
       'completed': 'default'
     };
-
     return <Badge variant={variants[paymentStatus] || 'secondary'}>
       Payment: {paymentStatus}
     </Badge>;
@@ -510,10 +513,8 @@ export default function StudentDashboard() {
 
   const handleSignatureSave = async (signature: string) => {
     if (!currentContract) return;
-
     try {
       setIsSavingSignature(true);
-
       const response = await fetch(`/api/contracts/${currentContract._id}/sign`, {
         method: 'POST',
         headers: {
@@ -531,7 +532,6 @@ export default function StudentDashboard() {
           title: 'Signature saved successfully!',
           description: 'Your signature has been saved. Contract is now fully signed!',
         });
-
         setShowSignatureModal(false);
         setCurrentContract(null);
         fetchData(); // Refresh data
@@ -638,6 +638,7 @@ export default function StudentDashboard() {
                 />
               </div>
             </div>
+
             {/* Filters */}
             <div className="bg-white rounded-lg shadow-sm border p-4 mb-6">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -693,6 +694,7 @@ export default function StudentDashboard() {
                 </div>
               </div>
             </div>
+
             {/* Results Summary */}
             <div className="mb-6">
               <p className="text-gray-600">
@@ -700,6 +702,7 @@ export default function StudentDashboard() {
                 {searchTerm && ` matching "${searchTerm}"`}
               </p>
             </div>
+
             <div className="grid gap-6">
               {currentJobs.map((job) => {
                 const hasApplied = appliedJobIds.has(job._id);
@@ -864,6 +867,7 @@ export default function StudentDashboard() {
                 );
               })}
             </div>
+
             {/* Jobs Pagination */}
             {totalJobsPages > 1 && (
               <div className="flex items-center justify-center space-x-2">
@@ -919,6 +923,7 @@ export default function StudentDashboard() {
                 </Button>
               </Link>
             </div>
+
             {/* Status Summary */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
               <Card>
@@ -962,6 +967,7 @@ export default function StudentDashboard() {
                 </CardContent>
               </Card>
             </div>
+
             {/* Proposals List */}
             {currentApplications.length === 0 ? (
               <div className="text-center py-16">
@@ -979,41 +985,23 @@ export default function StudentDashboard() {
             ) : (
               <div className="space-y-4">
                 {currentApplications.map((application) => {
-                  // Handle both string and object jobId
-                  let jobId: string | null = null;
-                  if (application.jobId) {
-                    if (typeof application.jobId === 'string') {
-                      jobId = application.jobId;
-                    } else if (application.jobId._id) {
-                      jobId = application.jobId._id;
-                    }
-                  }
-
-                  if (!jobId) return null;
-                  const job = getJobDetails(jobId);
-
+                  const job = getJobDetails(application.jobId);
                   if (!job) return null;
                   return (
-                    <Card
-                      key={application._id}
-                      className="hover:shadow-md transition-shadow"
-                    >
+                    <Card key={application._id} className="hover:shadow-md transition-shadow">
                       <CardHeader>
                         <div className="flex justify-between items-start">
                           <div className="flex-1">
                             <CardTitle className="text-lg">
                               <Link
-                                href={`/dashboard/student/jobs/${jobId}`}
+                                href={`/dashboard/student/jobs/${application.jobId}`}
                                 className="hover:text-blue-600"
                               >
                                 {job.title}
                               </Link>
                             </CardTitle>
                             <CardDescription>
-                              {job.company} • Submitted on{" "}
-                              {new Date(
-                                application.createdAt
-                              ).toLocaleDateString()}
+                              {job.company} • Submitted on {new Date(application.createdAt).toLocaleDateString()}
                             </CardDescription>
                           </div>
                           <div className="flex flex-col items-end gap-2">
@@ -1027,13 +1015,10 @@ export default function StudentDashboard() {
                         </p>
                         <div className="flex justify-between items-center">
                           <span className="font-medium text-lg">
-                            ${(job.budgetMin || 0).toLocaleString()} - $
-                            {(job.budgetMax || 0).toLocaleString()}
+                            ${job.budgetMin.toLocaleString()} - ${job.budgetMax.toLocaleString()}
                           </span>
                           <div className="flex gap-2">
-                            <Link
-                              href={`/dashboard/student/proposals/${application._id}`}
-                            >
+                            <Link href={`/dashboard/student/proposals/${application._id}`}>
                               <Button variant="outline" size="sm">
                                 View Details
                               </Button>
@@ -1045,9 +1030,7 @@ export default function StudentDashboard() {
                                 </Button>
                               </Link>
                             )}
-                            <Link
-                              href={`/dashboard/student/jobs/${jobId}`}
-                            >
+                            <Link href={`/dashboard/student/jobs/${application.jobId}`}>
                               <Button variant="outline" size="sm">
                                 View Job
                               </Button>
@@ -1059,54 +1042,58 @@ export default function StudentDashboard() {
                   );
                 })}
               </div>
-            )}
+            )
+            }
+
             {/* Applications Pagination */}
-            {totalApplicationsPages > 1 && (
-              <div className="flex items-center justify-center space-x-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setApplicationsCurrentPage(applicationsCurrentPage - 1)
-                  }
-                  disabled={applicationsCurrentPage === 1}
-                >
-                  Previous
-                </Button>
-                <div className="flex items-center space-x-1">
-                  {Array.from(
-                    { length: totalApplicationsPages },
-                    (_, i) => i + 1
-                  ).map((page) => (
-                    <Button
-                      key={page}
-                      variant={
-                        page === applicationsCurrentPage ? "default" : "outline"
-                      }
-                      size="sm"
-                      onClick={() => setApplicationsCurrentPage(page)}
-                      className="w-8 h-8 p-0"
-                    >
-                      {page}
-                    </Button>
-                  ))}
+            {
+              totalApplicationsPages > 1 && (
+                <div className="flex items-center justify-center space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setApplicationsCurrentPage(applicationsCurrentPage - 1)
+                    }
+                    disabled={applicationsCurrentPage === 1}
+                  >
+                    Previous
+                  </Button>
+                  <div className="flex items-center space-x-1">
+                    {Array.from(
+                      { length: totalApplicationsPages },
+                      (_, i) => i + 1
+                    ).map((page) => (
+                      <Button
+                        key={page}
+                        variant={
+                          page === applicationsCurrentPage ? "default" : "outline"
+                        }
+                        size="sm"
+                        onClick={() => setApplicationsCurrentPage(page)}
+                        className="w-8 h-8 p-0"
+                      >
+                        {page}
+                      </Button>
+                    ))}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setApplicationsCurrentPage(applicationsCurrentPage + 1)
+                    }
+                    disabled={applicationsCurrentPage === totalApplicationsPages}
+                  >
+                    Next
+                  </Button>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setApplicationsCurrentPage(applicationsCurrentPage + 1)
-                  }
-                  disabled={applicationsCurrentPage === totalApplicationsPages}
-                >
-                  Next
-                </Button>
-              </div>
-            )}
-          </TabsContent>
+              )
+            }
+          </TabsContent >
 
           {/* Messages Tab */}
-          <TabsContent value="chat" className="space-y-6">
+          < TabsContent value="chat" className="space-y-6" >
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[600px]">
               {/* Chat List */}
               <Card className="lg:col-span-1">
@@ -1153,6 +1140,7 @@ export default function StudentDashboard() {
                   </ScrollArea>
                 </CardContent>
               </Card>
+
               {/* Chat Window */}
               <Card className="lg:col-span-2">
                 {selectedChat ? (
@@ -1226,197 +1214,274 @@ export default function StudentDashboard() {
                 )}
               </Card>
             </div>
-          </TabsContent>
-
-          {/* Profile Tab */}
-          <TabsContent value="profile" className="space-y-6">
-            <div className="bg-white rounded-lg shadow-sm border p-6">
-              <div className="flex items-center space-x-4 mb-6">
-                <Avatar className="h-16 w-16">
-                  <AvatarImage src="/placeholder.svg" />
-                  <AvatarFallback className="text-lg">
-                    {user?.name?.split(" ").map((n) => n[0]).join("")}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900">Profile Settings</h2>
-                  <p className="text-gray-600">Update your personal information and preferences</p>
-                </div>
-              </div>
-              <form className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <Label htmlFor="name">Full Name</Label>
-                    <Input
-                      id="name"
-                      defaultValue={user?.name || ""}
-                      placeholder="Enter your full name"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      defaultValue={user?.email || ""}
-                      placeholder="Enter your email"
-                      disabled
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="phone">Phone Number</Label>
-                    <Input
-                      id="phone"
-                      defaultValue={user?.phone || ""}
-                      placeholder="Enter your phone number"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="role">Role</Label>
-                    <Input
-                      id="role"
-                      value={user?.role || ""}
-                      disabled
-                      className="bg-gray-50"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <Label htmlFor="bio">Bio</Label>
-                  <Textarea
-                    id="bio"
-                    placeholder="Tell us about yourself, your skills, and what you're looking for..."
-                    className="min-h-[100px]"
-                  />
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <Label htmlFor="skills">Skills (comma-separated)</Label>
-                    <Input
-                      id="skills"
-                      placeholder="e.g., React, Node.js, Python, UI/UX Design"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="experience">Years of Experience</Label>
-                    <Select>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select experience level" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="0-1">0-1 years</SelectItem>
-                        <SelectItem value="1-3">1-3 years</SelectItem>
-                        <SelectItem value="3-5">3-5 years</SelectItem>
-                        <SelectItem value="5-10">5-10 years</SelectItem>
-                        <SelectItem value="10+">10+ years</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="flex justify-end space-x-3">
-                  <Button variant="outline">Cancel</Button>
-                  <Button>Save Changes</Button>
-                </div>
-              </form>
-            </div>
-          </TabsContent>
-        </Tabs>
-      </div>
+          </TabsContent >
+        </Tabs >
+      </div >
 
       {/* Application Form Dialog */}
-      {selectedJob && (
-        <Dialog open={!!selectedJob} onOpenChange={() => setSelectedJob(null)}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Apply to {selectedJob.title}</DialogTitle>
-              <DialogDescription>
-                {selectedJob.company} • {selectedJob.location}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="coverLetter">Cover Letter *</Label>
-                <Textarea
-                  id="coverLetter"
-                  placeholder="Tell us why you're interested in this position and what makes you a great fit..."
-                  value={applicationForm.coverLetter}
-                  onChange={(e) =>
-                    setApplicationForm({
-                      ...applicationForm,
-                      coverLetter: e.target.value,
-                    })
-                  }
-                  className="min-h-[120px]"
-                />
+      {
+        selectedJob && (
+          <Dialog open={!!selectedJob} onOpenChange={() => setSelectedJob(null)}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Apply to {selectedJob.title}</DialogTitle>
+                <DialogDescription>
+                  {selectedJob.company} • {selectedJob.location}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="coverLetter">Cover Letter *</Label>
+                  <Textarea
+                    id="coverLetter"
+                    placeholder="Tell us why you're interested in this position and what makes you a great fit..."
+                    value={applicationForm.coverLetter}
+                    onChange={(e) =>
+                      setApplicationForm({
+                        ...applicationForm,
+                        coverLetter: e.target.value,
+                      })
+                    }
+                    className="min-h-[120px]"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="portfolio">Portfolio/Resume Link</Label>
+                  <Input
+                    id="portfolio"
+                    placeholder="https://your-portfolio.com or link to resume"
+                    value={applicationForm.portfolio}
+                    onChange={(e) =>
+                      setApplicationForm({
+                        ...applicationForm,
+                        portfolio: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="availability">Availability</Label>
+                  <Input
+                    id="availability"
+                    placeholder="When can you start? (e.g., Immediately, After finals, etc.)"
+                    value={applicationForm.availability}
+                    onChange={(e) =>
+                      setApplicationForm({
+                        ...applicationForm,
+                        availability: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+                <div className="flex justify-end space-x-2">
+                  <Button variant="outline" onClick={() => setSelectedJob(null)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleSubmitApplication}
+                    disabled={!applicationForm.coverLetter.trim()}
+                  >
+                    Submit Application
+                  </Button>
+                </div>
               </div>
-              <div>
-                <Label htmlFor="portfolio">Portfolio/Resume Link</Label>
-                <Input
-                  id="portfolio"
-                  placeholder="https://your-portfolio.com or link to resume"
-                  value={applicationForm.portfolio}
-                  onChange={(e) =>
-                    setApplicationForm({
-                      ...applicationForm,
-                      portfolio: e.target.value,
-                    })
-                  }
-                />
-              </div>
-              <div>
-                <Label htmlFor="availability">Availability</Label>
-                <Input
-                  id="availability"
-                  placeholder="When can you start? (e.g., Immediately, After finals, etc.)"
-                  value={applicationForm.availability}
-                  onChange={(e) =>
-                    setApplicationForm({
-                      ...applicationForm,
-                      availability: e.target.value,
-                    })
-                  }
-                />
-              </div>
-              <div className="flex justify-end space-x-2">
-                <Button variant="outline" onClick={() => setSelectedJob(null)}>
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleSubmitApplication}
-                  disabled={!applicationForm.coverLetter.trim()}
-                >
-                  Submit Application
-                </Button>
-              </div>
+            </DialogContent>
+          </Dialog>
+        )
+      }
+      {/* Active Contracts Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Active Contracts</CardTitle>
+          <CardDescription>
+            Contracts that require your attention or signature
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {contracts.length === 0 ? (
+            <div className="text-center py-8">
+              <div className="text-gray-400 mb-4">📋</div>
+              <h3 className="text-lg font-semibold mb-2">No Active Contracts</h3>
+              <p className="text-gray-600">
+                You don't have any active contracts at the moment.
+              </p>
             </div>
-          </DialogContent>
-        </Dialog>
-      )}
+          ) : (
+            <div className="space-y-4">
+              {contracts.map((contract) => (
+                <Card key={contract._id} className="border-l-4 border-l-blue-500">
+                  <CardContent className="p-4">
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <h3 className="font-semibold text-lg">{contract.title}</h3>
+                        <p className="text-sm text-gray-600">
+                          Job: {contract.jobId.title}
+                        </p>
+                        <p className="text-sm text-gray-600">
+                          Business: {contract.businessId.name}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-lg font-bold text-green-600">
+                          ₹{contract.totalAmount.toLocaleString()}
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          {new Date(contract.createdAt).toLocaleDateString()}
+                        </div>
+                      </div>
+                    </div>
 
+                    <div className="flex items-center gap-2 mb-3">
+                      {getStatusBadge(contract.status)}
+                      {getPaymentStatusBadge(contract.paymentStatus)}
+                    </div>
+
+                    {/* Signature Status */}
+                    <div className="flex items-center gap-4 mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">Business:</span>
+                        {contract.businessSignature ? (
+                          <Badge variant="outline" className="text-green-600">
+                            ✓ Signed
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary">Pending</Badge>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">Student:</span>
+                        {contract.studentSignature ? (
+                          <Badge variant="outline" className="text-green-600">
+                            ✓ Signed
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary">Pending</Badge>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-2">
+                      {contract.paymentStatus === 'completed' && !contract.studentSignature && (
+                        <Button
+                          onClick={() => {
+                            setCurrentContract(contract);
+                            setShowSignatureModal(true);
+                          }}
+                          className="bg-blue-600 hover:bg-blue-700"
+                        >
+                          Sign Contract
+                        </Button>
+                      )}
+
+                      {contract.status === 'signed' && (
+                        <Badge variant="default" className="text-green-600">
+                          Contract Fully Signed! 🎉
+                        </Badge>
+                      )}
+
+                      {contract.status === 'changes_requested' && (
+                        <Button variant="outline">
+                          Review Changes
+                        </Button>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+      {/* Proposals Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Your Proposals</CardTitle>
+          <CardDescription>
+            Track the status of your submitted proposals
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {proposals.length === 0 ? (
+            <div className="text-center py-8">
+              <div className="text-gray-400 mb-4">📝</div>
+              <h3 className="text-lg font-semibold mb-2">No Proposals Yet</h3>
+              <p className="text-gray-600">
+                Start by submitting proposals to jobs you're interested in.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {proposals.map((proposal) => (
+                <Card key={proposal._id}>
+                  <CardContent className="p-4">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="font-semibold">{proposal.jobId?.title || 'Job Title Not Available'}</h3>
+                        <p className="text-sm text-gray-600">
+                          {proposal.jobId && typeof proposal.jobId === 'object' && proposal.jobId.description
+                            ? `${proposal.jobId.description.substring(0, 100)}...`
+                            : 'Job description not available'}
+                        </p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <Badge variant={
+                            proposal.status === 'accepted' ? 'default' :
+                              proposal.status === 'rejected' ? 'destructive' :
+                                proposal.status === 'withdrawn' ? 'outline' : 'secondary'
+                          }>
+                            {proposal.status}
+                          </Badge>
+
+                          {proposal.contractId && (
+                            <Badge variant="outline">
+                              Contract: {proposal.contractId.status}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-lg font-bold text-green-600">
+                          ₹{proposal.quoteAmount.toLocaleString()}
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          {new Date(proposal.submittedAt).toLocaleDateString()}
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
       {/* Signature Modal */}
-      {showSignatureModal && currentContract && (
-        <Dialog open={showSignatureModal} onOpenChange={setShowSignatureModal}>
-          <DialogContent className="max-w-4xl">
-            <DialogHeader>
-              <DialogTitle>E-Sign Contract</DialogTitle>
-              <DialogDescription>
-                Please provide your signature to complete the contract for {currentContract.title}
-              </DialogDescription>
-            </DialogHeader>
+      {
+        showSignatureModal && currentContract && (
+          <Dialog open={showSignatureModal} onOpenChange={setShowSignatureModal}>
+            <DialogContent className="max-w-4xl">
+              <DialogHeader>
+                <DialogTitle>E-Sign Contract</DialogTitle>
+                <DialogDescription>
+                  Please provide your signature to complete the contract for {currentContract.title}
+                </DialogDescription>
+              </DialogHeader>
 
-            <SignaturePad
-              title="Sign as Student"
-              description={`Please provide your signature to complete the contract for ${currentContract.title}`}
-              onSave={handleSignatureSave}
-              onCancel={() => {
-                setShowSignatureModal(false);
-                setCurrentContract(null);
-              }}
-              isLoading={isSavingSignature}
-            />
-          </DialogContent>
-        </Dialog>
-      )}
-    </div>
+              <SignaturePad
+                title="Sign as Student"
+                description={`Please provide your signature to complete the contract for ${currentContract.title}`}
+                onSave={handleSignatureSave}
+                onCancel={() => {
+                  setShowSignatureModal(false);
+                  setCurrentContract(null);
+                }}
+                isLoading={isSavingSignature}
+              />
+            </DialogContent>
+          </Dialog>
+        )
+      }
+    </div >
   );
 }
