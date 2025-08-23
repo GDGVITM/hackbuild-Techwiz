@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyToken } from "./src/lib/auth/jwt";
 
 // Public paths that don't require authentication
 const PUBLIC_PATHS = [
@@ -16,17 +15,30 @@ const PUBLIC_PATHS = [
   "/api/webhooks",
   "/favicon.ico",
   "/_next",
-  "/api/upload" // Keep upload endpoint public for now
+  "/api/upload", // Keep upload endpoint public for now
+  "/debug" // Debug page for troubleshooting
 ];
 
-// Role-based route protection
+// Role-based route protection with more specific routes
 const ROLE_BASED_ROUTES = {
+  // Dashboard routes
   "/dashboard/business": ["business"],
   "/dashboard/student": ["student"],
-  "/api/contracts": ["business", "student"],
-  "/api/jobs": ["business", "student"],
-  "/api/proposals": ["business", "student"],
-  "/api/payments": ["business", "student"]
+  
+  // API routes with role requirements
+  "/api/jobs": ["business", "student"], // Both can access jobs
+  "/api/proposals": ["business", "student"], // Both can access proposals
+  "/api/contracts": ["business", "student"], // Both can access contracts
+  "/api/payments": ["business", "student"], // Both can access payments
+  
+  // Business-specific API routes
+  "/api/jobs/create": ["business"],
+  "/api/jobs/update": ["business"],
+  "/api/jobs/delete": ["business"],
+  
+  // Student-specific API routes
+  "/api/proposals/submit": ["student"],
+  "/api/proposals/update": ["student"],
 };
 
 export async function middleware(request: NextRequest) {
@@ -37,11 +49,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Get token from cookies or Authorization header
-  const token = request.cookies.get("token")?.value || 
-                request.headers.get("authorization")?.replace("Bearer ", "");
+  // Get token from cookies
+  const token = request.cookies.get("token")?.value;
+  const userCookie = request.cookies.get("user")?.value;
 
-  if (!token) {
+  if (!token || !userCookie) {
     // For API routes, return 401
     if (pathname.startsWith("/api/")) {
       return NextResponse.json(
@@ -57,44 +69,54 @@ export async function middleware(request: NextRequest) {
   }
 
   try {
-    // Verify JWT token
-    const payload = await verifyToken<{ userId: string; role: string; exp: number }>(token);
-    
-    // Check if token is expired
-    if (payload.exp && Date.now() >= payload.exp * 1000) {
-      throw new Error("Token expired");
+    // Parse user data from cookie (this is safe as it's set by the server)
+    let userData;
+    try {
+      userData = JSON.parse(decodeURIComponent(userCookie));
+    } catch {
+      throw new Error("Invalid user data");
+    }
+
+    const { role, id: userId } = userData;
+
+    if (!role || !userId) {
+      throw new Error("Invalid user data structure");
     }
 
     // Check role-based access for the specific route being accessed
     let hasAccess = true;
     let requiredRoles: string[] = [];
     
+    // Find the most specific matching route
     for (const [route, allowedRoles] of Object.entries(ROLE_BASED_ROUTES)) {
       if (pathname.startsWith(route)) {
         requiredRoles = allowedRoles;
-        hasAccess = allowedRoles.includes(payload.role);
+        hasAccess = allowedRoles.includes(role);
         break; // Found the matching route, no need to check others
       }
     }
 
     // If route requires specific roles and user doesn't have access
     if (requiredRoles.length > 0 && !hasAccess) {
+      console.log(`Access denied: User role ${role} not allowed for route ${pathname}. Required roles: ${requiredRoles.join(', ')}`);
+      
       if (pathname.startsWith("/api/")) {
         return NextResponse.json(
-          { error: "Insufficient permissions" },
+          { error: "Insufficient permissions. Your role does not have access to this resource." },
           { status: 403 }
         );
       }
+      
       // Redirect to appropriate dashboard based on user role
-      const dashboardPath = payload.role === 'business' ? '/dashboard/business' : '/dashboard/student';
+      const dashboardPath = role === 'business' ? '/dashboard/business' : '/dashboard/student';
       return NextResponse.redirect(new URL(dashboardPath, request.url));
     }
 
     // Add user info to headers for API routes
     if (pathname.startsWith("/api/")) {
       const requestHeaders = new Headers(request.headers);
-      requestHeaders.set("x-user-id", payload.userId);
-      requestHeaders.set("x-user-role", payload.role);
+      requestHeaders.set("x-user-id", userId);
+      requestHeaders.set("x-user-role", role);
 
       return NextResponse.next({
         request: {
@@ -106,11 +128,11 @@ export async function middleware(request: NextRequest) {
     // For page routes, just allow access if authentication passed
     return NextResponse.next();
   } catch (error) {
-    console.error("JWT verification failed:", error);
+    console.error("Authentication check failed:", error);
     
     // Clear invalid cookies
     const response = pathname.startsWith("/api/") 
-      ? NextResponse.json({ error: "Invalid or expired token" }, { status: 401 })
+      ? NextResponse.json({ error: "Invalid authentication data" }, { status: 401 })
       : NextResponse.redirect(new URL("/auth/login", request.url));
     
     response.cookies.set("token", "", { maxAge: 0, path: "/" });

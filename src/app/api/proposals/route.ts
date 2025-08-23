@@ -4,6 +4,7 @@ import { getUserFromRequest, createUnauthorizedResponse, createForbiddenResponse
 import Proposal from '@/lib/models/Proposal';
 import Job from '@/lib/models/Job';
 import dbConnect from '@/lib/db/mongoose';
+import { verifyAuthToken } from '@/lib/utils/auth';
 
 interface MilestoneData {
   title: string;
@@ -24,8 +25,22 @@ interface QueryParams {
 
 export async function GET(request: NextRequest) {
   try {
-    const user = getUserFromRequest(request);
+    console.log('Proposals API - Starting request...');
+    
+    let user = getUserFromRequest(request);
+    console.log('Proposals API - User from headers:', user);
+    
     if (!user) {
+      console.log('Proposals API - No user from headers, trying token verification...');
+      const payload = await verifyAuthToken(request);
+      if (payload) {
+        user = { userId: payload.userId, role: payload.role as 'student' | 'business' };
+        console.log('Proposals API - User from token:', user);
+      }
+    }
+
+    if (!user) {
+      console.log('Proposals API - No authentication found');
       return createUnauthorizedResponse('Authentication required');
     }
 
@@ -50,13 +65,22 @@ export async function GET(request: NextRequest) {
           return createForbiddenResponse('Unauthorized to view proposals for this job');
         }
       }
+      // For students, verify they can only see proposals for jobs they can access
+      else if (user.role === 'student') {
+        // Students can only see proposals for open jobs
+        const job = await Job.findById(jobId);
+        if (!job || job.status !== 'open') {
+          return createForbiddenResponse('Job not accessible');
+        }
+      }
       query.jobId = jobId;
     } else {
       // If no jobId provided, get proposals based on user role
       if (user.role === 'student') {
+        // Students can only see their own proposals
         query.studentId = user.userId;
       } else if (user.role === 'business') {
-        // Get all jobs owned by this business, then get proposals for those jobs
+        // Business users can see proposals for all their jobs
         const businessJobs = await Job.find({ businessId: user.userId }).select('_id');
         const jobIds = businessJobs.map(job => job._id);
         query.jobId = { $in: jobIds };
@@ -75,8 +99,9 @@ export async function GET(request: NextRequest) {
     // Calculate skip for pagination
     const skip = (page - 1) * limit;
 
+    console.log('Proposals API - Fetching proposals with query:', query);
     const proposals = await Proposal.find(query)
-      .populate('jobId', 'title description createdBy budgetMin budgetMax')
+      .populate('jobId', 'title description businessId budgetMin budgetMax')
       .populate('studentId', 'name email')
       .sort(sort)
       .limit(limit)
@@ -85,6 +110,7 @@ export async function GET(request: NextRequest) {
     // Get total count for pagination
     const total = await Proposal.countDocuments(query);
 
+    console.log('Proposals API - Returning proposals:', proposals.length);
     return NextResponse.json({
       proposals,
       pagination: {
@@ -95,11 +121,12 @@ export async function GET(request: NextRequest) {
       }
     });
   } catch (error) {
-    console.error('Failed to fetch proposals:', error);
+    console.error('Proposals API - Failed to fetch proposals:', error);
     return NextResponse.json({ error: 'Failed to fetch proposals' }, { status: 500 });
   }
 }
 
+// POST new proposal (only students)
 export async function POST(request: NextRequest) {
   try {
     const user = getUserFromRequest(request);
@@ -112,101 +139,53 @@ export async function POST(request: NextRequest) {
       return createForbiddenResponse('Only students can submit proposals');
     }
 
+    const body: ProposalData = await request.json();
+    const { jobId, coverLetter, milestones, quoteAmount } = body;
+
+    if (!jobId || !coverLetter || !quoteAmount) {
+      return NextResponse.json(
+        { error: 'Job ID, cover letter, and quote amount are required' },
+        { status: 400 }
+      );
+    }
+
     await dbConnect();
 
-    const proposalData: ProposalData = await request.json();
+    // Verify the job exists and is open
+    const job = await Job.findById(jobId);
+    if (!job) {
+      return NextResponse.json({ error: 'Job not found' }, { status: 404 });
+    }
 
-    // Check if student already submitted a proposal for this job
+    if (job.status !== 'open') {
+      return NextResponse.json({ error: 'Job is not open for proposals' }, { status: 400 });
+    }
+
+    // Check if student already has a proposal for this job
     const existingProposal = await Proposal.findOne({
-      jobId: proposalData.jobId,
+      jobId,
       studentId: user.userId
     });
 
     if (existingProposal) {
-      return NextResponse.json({ error: 'You have already submitted a proposal for this job' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'You have already submitted a proposal for this job' },
+        { status: 400 }
+      );
     }
 
-    // Validate milestone amounts match quote amount
-    const totalMilestoneAmount = proposalData.milestones.reduce((sum: number, m: MilestoneData) => sum + m.amount, 0);
-    if (Math.abs(totalMilestoneAmount - proposalData.quoteAmount) > 0.01) {
-      return NextResponse.json({
-        error: 'Total milestone amounts must equal the quote amount',
-        details: {
-          totalMilestoneAmount,
-          quoteAmount: proposalData.quoteAmount,
-          difference: Math.abs(totalMilestoneAmount - proposalData.quoteAmount)
-        }
-      }, { status: 400 });
-    }
-
-    // Validate quote amount is within job budget range
-    const job = await Job.findById(proposalData.jobId);
-    if (job) {
-      if (proposalData.quoteAmount < job.budgetMin) {
-        return NextResponse.json({
-          error: `Quote amount ($${proposalData.quoteAmount}) is below the job's minimum budget ($${job.budgetMin})`,
-          details: {
-            quoteAmount: proposalData.quoteAmount,
-            budgetMin: job.budgetMin,
-            budgetMax: job.budgetMax
-          }
-        }, { status: 400 });
-      }
-
-      if (proposalData.quoteAmount > job.budgetMax) {
-        return NextResponse.json({
-          error: `Quote amount ($${proposalData.quoteAmount}) exceeds the job's maximum budget ($${job.budgetMax})`,
-          details: {
-            quoteAmount: proposalData.quoteAmount,
-            budgetMin: job.budgetMin,
-            budgetMax: job.budgetMax
-          }
-        }, { status: 400 });
-      }
-    }
-
-    // Validate milestone due dates are in the future
-    const currentDate = new Date();
-    const invalidMilestones = proposalData.milestones.filter((m: MilestoneData) => {
-      const dueDate = new Date(m.dueDate);
-      return dueDate <= currentDate;
-    });
-
-    if (invalidMilestones.length > 0) {
-      return NextResponse.json({
-        error: 'Milestone due dates must be in the future',
-        details: {
-          invalidMilestones: invalidMilestones.map((m: MilestoneData) => ({
-            title: m.title,
-            dueDate: m.dueDate
-          }))
-        }
-      }, { status: 400 });
-    }
-
-    const newProposal = new Proposal({
-      ...proposalData,
+    const proposal = new Proposal({
+      jobId,
       studentId: user.userId,
-      milestones: proposalData.milestones.map((m: MilestoneData) => ({
-        ...m,
-        dueDate: new Date(m.dueDate),
-        status: 'pending'
-      })),
-      statusHistory: [{
-        status: 'pending',
-        changedAt: new Date(),
-        reason: 'Proposal submitted'
-      }]
+      coverLetter,
+      milestones: milestones || [],
+      quoteAmount,
+      status: 'pending'
     });
 
-    await newProposal.save();
+    await proposal.save();
 
-    // Populate the saved proposal for response
-    const populatedProposal = await Proposal.findById(newProposal._id)
-      .populate('jobId', 'title description createdBy')
-      .populate('studentId', 'name email');
-
-    return NextResponse.json({ proposal: populatedProposal }, { status: 201 });
+    return NextResponse.json({ success: true, proposal }, { status: 201 });
   } catch (error) {
     console.error('Failed to create proposal:', error);
     return NextResponse.json({ error: 'Failed to create proposal' }, { status: 500 });

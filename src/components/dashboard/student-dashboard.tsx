@@ -1,12 +1,8 @@
 "use client";
-import { Proposal } from "@/lib/models/Proposal";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Job } from "@/types/job";
-// Import at the top
 import { useRouter } from "next/navigation";
-
-// import { Proposall } from "@/types/proposal";
 import Link from "next/link";
 import {
   Card,
@@ -39,7 +35,6 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import JobDetailsPage from "../../app/dashboard/student/jobs/[id]/page";
 import {
   Search,
   MapPin,
@@ -70,9 +65,28 @@ interface ChatConversation {
   }>;
 }
 
+// Define the Proposal interface
+interface Proposal {
+  _id: string;
+  jobId: string;
+  studentId: string;
+  coverLetter: string;
+  portfolio?: string;
+  availability?: string;
+  status: "pending" | "accepted" | "rejected" | "withdrawn";
+  createdAt: string;
+  updatedAt: string;
+  quoteAmount?: number;
+  milestones?: Array<{
+    title: string;
+    amount: number;
+    dueDate: string;
+  }>;
+}
+
 export default function StudentDashboard() {
   const router = useRouter();
-  const { user, isAuthenticated, loading: authLoading } = useAuth();
+  const { user, token, isAuthenticated, loading: authLoading } = useAuth();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [chats, setChats] = useState<ChatConversation[]>([]);
@@ -90,27 +104,23 @@ export default function StudentDashboard() {
   });
   const [jobsCurrentPage, setJobsCurrentPage] = useState(1);
   const [applicationsCurrentPage, setApplicationsCurrentPage] = useState(1);
-  const [selectedChat, setSelectedChat] = useState<ChatConversation | null>(
-    null
-  );
+  const [selectedChat, setSelectedChat] = useState<ChatConversation | null>(null);
   const [newMessage, setNewMessage] = useState("");
 
   // Filter states
   const [skillFilter, setSkillFilter] = useState<string>("all");
   const [budgetFilter, setBudgetFilter] = useState<string>("all");
-
   const jobsPerPage = 5;
   const applicationsPerPage = 5;
 
   // Check authentication and fetch data
   useEffect(() => {
     if (!authLoading) {
-      if (!isAuthenticated) {
+      if (!isAuthenticated || !user) {
         router.push('/auth/login');
         return;
       }
-      
-      if (user && user.role !== 'student') {
+      if (user.role !== 'student') {
         router.push('/unauthorized');
         return;
       }
@@ -123,9 +133,8 @@ export default function StudentDashboard() {
       try {
         const response = await fetch("/api/jobs");
         const data = await response.json();
-
         if (response.ok) {
-          setJobs(data.jobs);
+          setJobs(data.jobs || []);
         } else {
           setError(data.error || "Failed to fetch jobs");
         }
@@ -141,65 +150,65 @@ export default function StudentDashboard() {
   // Fetch proposals
   useEffect(() => {
     const fetchProposals = async () => {
-      if (!isAuthenticated || !user) return;
-
+      if (!isAuthenticated || !user || !token) return;
       try {
         const response = await fetch("/api/proposals", {
-          credentials: "include",
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
         });
         const data = await response.json();
-
         if (response.ok) {
-          setProposals(data.proposals);
+          setProposals(data.proposals || []);
         }
       } catch (err) {
         console.error("Failed to fetch proposals:", err);
       }
     };
     fetchProposals();
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, user, token]);
 
   // Fetch chats
   useEffect(() => {
     const fetchChats = async () => {
-      if (!isAuthenticated || !user) return;
-
+      if (!isAuthenticated || !user || !token) return;
       try {
         const response = await fetch("/api/chats", {
-          credentials: "include",
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
         });
         const data = await response.json();
-
         if (response.ok) {
-          setChats(data.chats);
+          setChats(data.chats || []);
         }
       } catch (err) {
         console.error("Failed to fetch chats:", err);
       }
     };
     fetchChats();
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, user, token]);
 
   // Filter and search jobs
   const filteredJobs = jobs.filter((job) => {
     // Filter by search term
     const matchesSearch =
       searchTerm === "" ||
-      job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      job.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      job.skillsRequired.some((skill) =>
+      (job.title && job.title.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (job.description && job.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (job.skillsRequired && job.skillsRequired.some((skill) =>
         skill.toLowerCase().includes(searchTerm.toLowerCase())
-      );
+      ));
 
     // Filter by skill
     const matchesSkill =
-      skillFilter === "all" || job.skillsRequired.includes(skillFilter);
+      skillFilter === "all" || (job.skillsRequired && job.skillsRequired.includes(skillFilter));
 
     // Filter by budget
     let matchesBudget = true;
     if (budgetFilter !== "all") {
       const [min, max] = budgetFilter.split("-").map(Number);
-      const avgBudget = (job.budgetMin + job.budgetMax) / 2;
+      const avgBudget = ((job.budgetMin || 0) + (job.budgetMax || 0)) / 2;
       matchesBudget = avgBudget >= min && avgBudget <= max;
     }
 
@@ -228,7 +237,9 @@ export default function StudentDashboard() {
   const getAllSkills = () => {
     const skills = new Set<string>();
     jobs.forEach((job) => {
-      job.skillsRequired.forEach((skill) => skills.add(skill));
+      if (job.skillsRequired) {
+        job.skillsRequired.forEach((skill) => skills.add(skill));
+      }
     });
     return Array.from(skills).sort();
   };
@@ -247,12 +258,7 @@ export default function StudentDashboard() {
     return proposal ? proposal.status : null;
   };
 
-  // // Handle job application
-  // const handleApplyToJob = (job: Job) => {
-  //   setSelectedJob(job);
-  //   setApplicationForm({ coverLetter: "", portfolio: "", availability: "" });
-  // };
-  // Replace the handleApplyToJob function
+  // Handle job application
   const handleApplyToJob = (job: Job) => {
     router.push(`/dashboard/student/jobs/${job._id}?action=submit`);
   };
@@ -260,7 +266,6 @@ export default function StudentDashboard() {
   // Submit application
   const handleSubmitApplication = async () => {
     if (!selectedJob || !token) return;
-
     try {
       const response = await fetch("/api/proposals", {
         method: "POST",
@@ -275,7 +280,6 @@ export default function StudentDashboard() {
           availability: applicationForm.availability,
         }),
       });
-
       if (response.ok) {
         // Refresh proposals
         const proposalsResponse = await fetch("/api/proposals", {
@@ -285,7 +289,7 @@ export default function StudentDashboard() {
         });
         const proposalsData = await proposalsResponse.json();
         if (proposalsResponse.ok) {
-          setProposals(proposalsData.proposals);
+          setProposals(proposalsData.proposals || []);
         }
         setSelectedJob(null);
         setApplicationForm({
@@ -305,7 +309,6 @@ export default function StudentDashboard() {
   // Send message
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !selectedChat || !token) return;
-
     try {
       const response = await fetch(`/api/chats/${selectedChat.id}/messages`, {
         method: "POST",
@@ -317,7 +320,6 @@ export default function StudentDashboard() {
           content: newMessage,
         }),
       });
-
       if (response.ok) {
         // Update the selectedChat with the new message
         const updatedMessages = [
@@ -335,20 +337,18 @@ export default function StudentDashboard() {
           lastMessage: newMessage,
           timestamp: new Date().toISOString(),
         });
-
         // Update the chat in the chats list
         setChats(
           chats.map((chat) =>
             chat.id === selectedChat.id
               ? {
-                  ...chat,
-                  lastMessage: newMessage,
-                  timestamp: new Date().toISOString(),
-                }
+                ...chat,
+                lastMessage: newMessage,
+                timestamp: new Date().toISOString(),
+              }
               : chat
           )
         );
-
         setNewMessage("");
       } else {
         const errorData = await response.json();
@@ -459,6 +459,7 @@ export default function StudentDashboard() {
               <span>Profile</span>
             </TabsTrigger>
           </TabsList>
+
           {/* Explore Jobs Tab */}
           <TabsContent value="explore" className="space-y-6">
             <div className="flex items-center space-x-4">
@@ -541,7 +542,6 @@ export default function StudentDashboard() {
               {currentJobs.map((job) => {
                 const hasApplied = appliedJobIds.has(job._id);
                 const proposalStatus = getProposalStatus(job._id);
-
                 return (
                   <Card
                     key={job._id}
@@ -553,10 +553,10 @@ export default function StudentDashboard() {
                           <Avatar className="w-12 h-12">
                             <AvatarImage
                               src={job.companyLogo || "/placeholder.svg"}
-                              alt={job.company}
+                              alt={job.company || "Company"}
                             />
                             <AvatarFallback>
-                              {job.company?.charAt(0) || "C"}
+                              {(job.company || "Company").charAt(0)}
                             </AvatarFallback>
                           </Avatar>
                           <div>
@@ -574,13 +574,13 @@ export default function StudentDashboard() {
                               <div className="flex items-center space-x-1">
                                 <DollarSign className="w-4 h-4" />
                                 <span>
-                                  ${job.budgetMin.toLocaleString()} - $
-                                  {job.budgetMax.toLocaleString()}
+                                  ${(job.budgetMin || 0).toLocaleString()} - $
+                                  {(job.budgetMax || 0).toLocaleString()}
                                 </span>
                               </div>
                               <div className="flex items-center space-x-1">
                                 <Clock className="w-4 h-4" />
-                                <span>{job.duration}</span>
+                                <span>{job.duration || "Not specified"}</span>
                               </div>
                             </div>
                           </div>
@@ -592,8 +592,8 @@ export default function StudentDashboard() {
                                 proposalStatus === "accepted"
                                   ? "default"
                                   : proposalStatus === "rejected"
-                                  ? "destructive"
-                                  : "secondary"
+                                    ? "destructive"
+                                    : "secondary"
                               }
                               className={
                                 proposalStatus === "accepted"
@@ -604,11 +604,10 @@ export default function StudentDashboard() {
                               {proposalStatus === "accepted"
                                 ? "Accepted"
                                 : proposalStatus === "rejected"
-                                ? "Rejected"
-                                : "Pending"}
+                                  ? "Rejected"
+                                  : "Pending"}
                             </Badge>
                           )}
-
                           <Dialog>
                             <DialogTrigger asChild>
                               <Button variant="outline" size="sm">
@@ -629,7 +628,7 @@ export default function StudentDashboard() {
                                     Job Description
                                   </h4>
                                   <p className="text-slate-600">
-                                    {job.description}
+                                    {job.description || "No description provided"}
                                   </p>
                                 </div>
                                 <div>
@@ -637,7 +636,7 @@ export default function StudentDashboard() {
                                     Skills Required
                                   </h4>
                                   <div className="flex flex-wrap gap-2">
-                                    {job.skillsRequired.map((skill, index) => (
+                                    {(job.skillsRequired || []).map((skill, index) => (
                                       <Badge key={index} variant="secondary">
                                         {skill}
                                       </Badge>
@@ -660,7 +659,6 @@ export default function StudentDashboard() {
                               </div>
                             </DialogContent>
                           </Dialog>
-
                           {!hasApplied ? (
                             <Button onClick={() => handleApplyToJob(job)}>
                               Apply Now
@@ -674,16 +672,16 @@ export default function StudentDashboard() {
                       </div>
                     </CardHeader>
                     <CardContent>
-                      <p className="text-slate-600 mb-4">{job.description}</p>
+                      <p className="text-slate-600 mb-4">{job.description || "No description provided"}</p>
                       <div className="flex flex-wrap gap-2">
-                        {job.skillsRequired.slice(0, 4).map((skill, index) => (
+                        {(job.skillsRequired || []).slice(0, 4).map((skill, index) => (
                           <Badge key={index} variant="secondary">
                             {skill}
                           </Badge>
                         ))}
-                        {job.skillsRequired.length > 4 && (
+                        {(job.skillsRequired || []).length > 4 && (
                           <Badge variant="secondary">
-                            +{job.skillsRequired.length - 4} more
+                            +{(job.skillsRequired || []).length - 4} more
                           </Badge>
                         )}
                       </div>
@@ -732,8 +730,8 @@ export default function StudentDashboard() {
               </div>
             )}
           </TabsContent>
+
           {/* My Applications Tab */}
-          
           <TabsContent value="applications" className="space-y-6">
             <div className="flex justify-between items-center mb-6">
               <div>
@@ -744,7 +742,7 @@ export default function StudentDashboard() {
               </div>
               <Link href="/dashboard/student/proposals">
                 <Button variant="outline">
-                  View All Proposals 
+                  View All Proposals
                 </Button>
               </Link>
             </div>
@@ -812,7 +810,6 @@ export default function StudentDashboard() {
                 {currentApplications.map((application) => {
                   const job = getJobDetails(application.jobId);
                   if (!job) return null;
-
                   return (
                     <Card
                       key={application._id}
@@ -845,13 +842,11 @@ export default function StudentDashboard() {
                         <p className="mb-4 text-gray-700 line-clamp-2">
                           {application.coverLetter}
                         </p>
-
                         <div className="flex justify-between items-center">
                           <span className="font-medium text-lg">
-                            ${job.budgetMin.toLocaleString()} - $
-                            {job.budgetMax.toLocaleString()}
+                            ${(job.budgetMin || 0).toLocaleString()} - $
+                            {(job.budgetMax || 0).toLocaleString()}
                           </span>
-
                           <div className="flex gap-2">
                             <Link
                               href={`/dashboard/student/proposals/${application._id}`}
@@ -920,6 +915,7 @@ export default function StudentDashboard() {
               </div>
             )}
           </TabsContent>
+
           {/* Messages Tab */}
           <TabsContent value="chat" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[600px]">
@@ -936,11 +932,10 @@ export default function StudentDashboard() {
                     {chats.map((conversation) => (
                       <div
                         key={conversation.id}
-                        className={`p-4 border-b cursor-pointer hover:bg-slate-50 ${
-                          selectedChat?.id === conversation.id
-                            ? "bg-indigo-50 border-indigo-200"
-                            : ""
-                        }`}
+                        className={`p-4 border-b cursor-pointer hover:bg-slate-50 ${selectedChat?.id === conversation.id
+                          ? "bg-indigo-50 border-indigo-200"
+                          : ""
+                          }`}
                         onClick={() => setSelectedChat(conversation)}
                       >
                         <div className="flex items-center justify-between mb-2">
@@ -986,26 +981,23 @@ export default function StudentDashboard() {
                           {selectedChat.messages.map((message) => (
                             <div
                               key={message.id}
-                              className={`flex ${
-                                message.sender === "student"
-                                  ? "justify-end"
-                                  : "justify-start"
-                              }`}
+                              className={`flex ${message.sender === "student"
+                                ? "justify-end"
+                                : "justify-start"
+                                }`}
                             >
                               <div
-                                className={`max-w-[70%] p-3 rounded-lg ${
-                                  message.sender === "student"
-                                    ? "bg-indigo-600 text-white"
-                                    : "bg-slate-100 text-slate-900"
-                                }`}
+                                className={`max-w-[70%] p-3 rounded-lg ${message.sender === "student"
+                                  ? "bg-indigo-600 text-white"
+                                  : "bg-slate-100 text-slate-900"
+                                  }`}
                               >
                                 <p className="text-sm">{message.content}</p>
                                 <p
-                                  className={`text-xs mt-1 ${
-                                    message.sender === "student"
-                                      ? "text-indigo-200"
-                                      : "text-slate-500"
-                                  }`}
+                                  className={`text-xs mt-1 ${message.sender === "student"
+                                    ? "text-indigo-200"
+                                    : "text-slate-500"
+                                    }`}
                                 >
                                   {new Date(
                                     message.timestamp
@@ -1063,7 +1055,6 @@ export default function StudentDashboard() {
                   <p className="text-gray-600">Update your personal information and preferences</p>
                 </div>
               </div>
-
               <form className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
@@ -1102,7 +1093,6 @@ export default function StudentDashboard() {
                     />
                   </div>
                 </div>
-
                 <div>
                   <Label htmlFor="bio">Bio</Label>
                   <Textarea
@@ -1111,7 +1101,6 @@ export default function StudentDashboard() {
                     className="min-h-[100px]"
                   />
                 </div>
-
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <Label htmlFor="skills">Skills (comma-separated)</Label>
@@ -1136,7 +1125,6 @@ export default function StudentDashboard() {
                     </Select>
                   </div>
                 </div>
-
                 <div className="flex justify-end space-x-3">
                   <Button variant="outline">Cancel</Button>
                   <Button>Save Changes</Button>

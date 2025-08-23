@@ -61,14 +61,17 @@ export default function SignUpForm() {
             
             if (response.ok && data.success) {
                 // Auto-login after successful registration
-                login(data.user.token || '', data.user);
+                login(data.token || '', data.user);
                 
-                // Redirect based on user role
-                if (data.user.role === 'student') {
-                    router.push('/dashboard/student');
-                } else if (data.user.role === 'business') {
-                    router.push('/dashboard/business');
-                }
+                // Add a small delay to ensure AuthContext state is updated
+                setTimeout(() => {
+                  // Redirect based on user role
+                  if (data.user.role === 'student') {
+                      router.push('/dashboard/student');
+                  } else if (data.user.role === 'business') {
+                      router.push('/dashboard/business');
+                  }
+                }, 100);
             } else {
                 setError(data.error || 'Registration failed');
             }

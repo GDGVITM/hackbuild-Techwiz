@@ -79,6 +79,7 @@ export async function POST(request: NextRequest) {
     return createAuthResponse({
       success: true,
       user: userData,
+      token: token, // Include token in response body for client-side access
       message: 'Registration successful'
     }, token, userData, 201);
 

@@ -18,7 +18,7 @@ export async function GET(
     const proposalId = params.id;
 
     const proposal = await Proposal.findById(proposalId)
-      .populate('jobId', 'title description createdBy')
+      .populate('jobId', 'title description businessId')
       .populate('studentId', 'name email');
 
     if (!proposal) {
@@ -97,7 +97,7 @@ export async function PUT(
 
     // Return populated proposal
     const updatedProposal = await Proposal.findById(proposalId)
-      .populate('jobId', 'title description createdBy')
+      .populate('jobId', 'title description businessId')
       .populate('studentId', 'name email');
 
     return NextResponse.json({

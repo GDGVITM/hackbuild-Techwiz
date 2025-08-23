@@ -35,16 +35,19 @@ export default function LoginForm() {
         console.log('LoginForm - Login successful, user role:', data.user.role);
         // The cookies are automatically set by the server
         // We just need to update the client-side state
-        login(data.user.token || '', data.user);
+        login(data.token || '', data.user);
 
-        // Redirect based on user role
-        if (data.user.role === 'student') {
-          console.log('LoginForm - Redirecting to student dashboard');
-          router.push('/dashboard/student');
-        } else if (data.user.role === 'business') {
-          console.log('LoginForm - Redirecting to business dashboard');
-          router.push('/dashboard/business');
-        }
+        // Add a small delay to ensure AuthContext state is updated
+        setTimeout(() => {
+          // Redirect based on user role
+          if (data.user.role === 'student') {
+            console.log('LoginForm - Redirecting to student dashboard');
+            router.push('/dashboard/student');
+          } else if (data.user.role === 'business') {
+            console.log('LoginForm - Redirecting to business dashboard');
+            router.push('/dashboard/business');
+          }
+        }, 100);
       } else {
         console.log('LoginForm - Login failed:', data.error);
         setError(data.error || 'Login failed');

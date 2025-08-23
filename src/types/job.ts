@@ -6,7 +6,17 @@ export interface Job {
   budgetMin: number;
   budgetMax: number;
   businessId: string;
-  status: 'open' | 'in-progress' | 'completed' | 'cancelled';
+  status: 'open' | 'closed';
+  company?: string;
+  companyLogo?: string;
+  location?: string;
+  duration?: string;
+  milestones?: Array<{
+    title: string;
+    amount: number;
+    dueDate: Date;
+  }>;
   createdAt: string;
   updatedAt: string;
 }
+

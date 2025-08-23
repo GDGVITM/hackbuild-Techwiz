@@ -29,9 +29,20 @@ export const verifyToken = async <T = JWTPayloadWithUser>(token: string): Promis
   }
 
   try {
-    const { payload } = await jwtVerify(token, secret);
-    return payload as T;
+    console.log('JWT - Starting token verification...');
+    
+    // Add timeout to JWT verification
+    const result = await Promise.race([
+      jwtVerify(token, secret),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('JWT verification timeout')), 3000)
+      )
+    ]);
+    
+    console.log('JWT - Token verification successful');
+    return result.payload as T;
   } catch (error) {
+    console.error('JWT - Token verification failed:', error);
     if (error instanceof Error) {
       throw new Error(`Token verification failed: ${error.message}`);
     }

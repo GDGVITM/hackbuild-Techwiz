@@ -51,12 +51,15 @@ export async function POST(request: NextRequest) {
       phone: user.phone
     };
 
-    // Create response with cookies
-    return createAuthResponse({
+    // Create response with cookies and include token in response body
+    const response = createAuthResponse({
       success: true,
       user: userData,
+      token: token, // Include token in response body for client-side access
       message: 'Login successful'
     }, token, userData);
+
+    return response;
 
   } catch (error) {
     console.error('Login error:', error);
