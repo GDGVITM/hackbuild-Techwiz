@@ -30,6 +30,15 @@ export async function POST(
       return NextResponse.json({ error: 'Contract not found' }, { status: 404 });
     }
     
+    // Log the current contract state
+    console.log('Current contract state:', {
+      id: contract._id,
+      paymentStatus: contract.paymentStatus,
+      status: contract.status,
+      businessId: contract.businessId,
+      studentId: contract.studentId
+    });
+    
     // Verify the user is the business owner of this contract
     if (contract.businessId.toString() !== userId) {
       return NextResponse.json({ error: 'Only the business owner can make payments' }, { status: 403 });
@@ -40,6 +49,12 @@ export async function POST(
       return NextResponse.json({ 
         error: 'Contract must be approved before payment can be made' 
       }, { status: 400 });
+    }
+    
+    // Ensure paymentStatus is valid
+    if (contract.paymentStatus && !['pending', 'paid'].includes(contract.paymentStatus)) {
+      console.log('Invalid paymentStatus detected, resetting to pending');
+      contract.paymentStatus = 'pending';
     }
     
     if (contract.paymentStatus === 'paid') {
@@ -54,7 +69,36 @@ export async function POST(
     // Update payment status
     contract.paymentStatus = 'paid';
     contract.updatedAt = new Date();
-    await contract.save();
+    
+    console.log('Contract before save:', {
+      id: contract._id,
+      paymentStatus: contract.paymentStatus,
+      status: contract.status,
+      businessId: contract.businessId,
+      studentId: contract.studentId
+    });
+    
+    // Validate the contract before saving
+    try {
+      await contract.validate();
+      console.log('Contract validation passed');
+    } catch (validationError: any) {
+      console.error('Contract validation error:', validationError);
+      return NextResponse.json({ 
+        error: `Contract validation failed: ${validationError.message}` 
+      }, { status: 400 });
+    }
+    
+    // Save the contract
+    try {
+      await contract.save();
+      console.log('Contract saved successfully');
+    } catch (saveError: any) {
+      console.error('Contract save error:', saveError);
+      return NextResponse.json({ 
+        error: `Failed to save contract: ${saveError.message}` 
+      }, { status: 500 });
+    }
     
     // Populate the updated contract
     const updatedContract = await Contract.findById(contractId)
@@ -75,6 +119,13 @@ export async function POST(
     // Handle JWT errors
     if (error.name === 'JsonWebTokenError') {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    }
+    
+    // Handle validation errors
+    if (error.name === 'ValidationError') {
+      return NextResponse.json({ 
+        error: `Validation error: ${error.message}` 
+      }, { status: 400 });
     }
     
     return NextResponse.json(

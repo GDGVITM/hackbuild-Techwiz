@@ -76,8 +76,9 @@ const contractSchema = new mongoose.Schema({
   },
   paymentStatus: {
     type: String,
-    enum: ['pending', 'paid'],
-    default: 'pending'
+    enum: ['pending', 'partial', 'completed'],
+    default: 'pending',
+    required: true
   },
   razorpayOrderId: {
     type: String
@@ -87,6 +88,19 @@ const contractSchema = new mongoose.Schema({
   },
   razorpaySignature: {
     type: String
+  },
+  // E-Signature fields
+  businessSignature: {
+    type: String
+  },
+  studentSignature: {
+    type: String
+  },
+  businessSignedAt: {
+    type: Date
+  },
+  studentSignedAt: {
+    type: Date
   },
   createdAt: {
     type: Date,
