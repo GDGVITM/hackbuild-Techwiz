@@ -12,7 +12,7 @@ interface Job {
   businessId: string
   title: string
   description: string
-  skillsRequired: string[]
+  skills: string[]
   budgetMin: number
   budgetMax: number
   milestones: Array<{
@@ -45,7 +45,7 @@ export default function HomePage() {
             ...job,
             budgetMin: job.budgetMin || job.budget,
             budgetMax: job.budgetMax || job.budget,
-            skillsRequired: job.skillsRequired || job.skills || [],
+            skills: job.skills || job.skills || [],
             milestones: job.milestones || [],
             status: job.status || "open",
             createdAt: new Date(job.createdAt),

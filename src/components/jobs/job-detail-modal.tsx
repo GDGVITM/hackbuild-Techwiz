@@ -17,7 +17,7 @@ interface Job {
   businessId: string
   title: string
   description: string
-  skillsRequired: string[]
+  skills: string[]
   budgetMin: number
   budgetMax: number
   milestones: Milestone[]
@@ -114,11 +114,11 @@ export function JobDetailModal({ job, isOpen, onClose, onApply }: JobDetailModal
           </div>
 
           {/* Skills Required Section */}
-          {job.skillsRequired.length > 0 && (
+          {job.skills.length > 0 && (
             <div>
               <h3 className="font-semibold text-lg mb-3">Skills Required</h3>
               <div className="flex flex-wrap gap-2">
-                {job.skillsRequired.map((skill, index) => (
+                {job.skills.map((skill, index) => (
                   <Badge key={index} variant="outline" className="text-sm py-1 px-3">
                     {skill}
                   </Badge>

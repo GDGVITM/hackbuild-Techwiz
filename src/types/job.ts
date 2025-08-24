@@ -2,7 +2,7 @@ export interface Job {
   _id: string;
   title: string;
   description: string;
-  skillsRequired: string[];
+  skills: string[];   // ✅ correct
   budgetMin: number;
   budgetMax: number;
   businessId: string;
@@ -19,4 +19,5 @@ export interface Job {
   createdAt: string;
   updatedAt: string;
 }
+
 

@@ -18,7 +18,7 @@ interface Job {
   businessId: string
   title: string
   description: string
-  skillsRequired: string[]
+  skills: string[]
   budgetMin: number
   budgetMax: number
   milestones: Milestone[]
@@ -105,18 +105,18 @@ export function JobList({ jobs, onApply, onViewDetails }: JobListProps) {
               </div>
               
               {/* Skills Required */}
-              {job.skillsRequired.length > 0 && (
+              {job.skills.length > 0 && (
                 <div className="space-y-2">
                   <p className="text-sm font-medium">Skills Required:</p>
                   <div className="flex flex-wrap gap-1">
-                    {job.skillsRequired.slice(0, 6).map((skill, index) => (
+                    {job.skills.slice(0, 6).map((skill, index) => (
                       <Badge key={index} variant="outline" className="text-xs">
                         {skill}
                       </Badge>
                     ))}
-                    {job.skillsRequired.length > 6 && (
+                    {job.skills.length > 6 && (
                       <Badge variant="outline" className="text-xs">
-                        +{job.skillsRequired.length - 6} more
+                        +{job.skills.length - 6} more
                       </Badge>
                     )}
                   </div>

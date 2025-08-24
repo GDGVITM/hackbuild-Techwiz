@@ -1,4 +1,4 @@
-'use client';
+"use client";
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -13,6 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useToast } from '@/hooks/use-toast';
 import {
   Building2,
   Users,
@@ -76,6 +77,7 @@ interface ChatConversation {
 export default function BusinessDashboard() {
   const router = useRouter();
   const { user, token, isAuthenticated, loading: authLoading } = useAuth();
+  const { toast } = useToast();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [proposals, setProposals] = useState<JobApplication[]>([]);
   const [selectedApplication, setSelectedApplication] = useState<JobApplication | null>(null);
@@ -85,13 +87,12 @@ export default function BusinessDashboard() {
   const [authChecking, setAuthChecking] = useState(true);
   const [chatConversations, setChatConversations] = useState<ChatConversation[]>([]);
   const [newMessage, setNewMessage] = useState("");
-  // In your business dashboard component
   const [selectedProposal, setSelectedProposal] = useState<JobApplication | null>(null);
   const [selectedChat, setSelectedChat] = useState<string | null>(null);
   const [newJobPost, setNewJobPost] = useState({
     title: "",
     description: "",
-    skillsRequired: "",
+    skills: "",
     budgetMin: "",
     budgetMax: "",
   });
@@ -99,14 +100,11 @@ export default function BusinessDashboard() {
   const [jobPostsPage, setJobPostsPage] = useState(1);
   const applicationsPerPage = 5;
   const jobPostsPerPage = 5;
+  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
 
   // Check authentication and role
-  // In BusinessDashboard.tsx
-
-  // Update the authentication useEffect
   useEffect(() => {
     console.log('BusinessDashboard - Auth state:', { isAuthenticated, authLoading, user, hasToken: !!token });
-
     // Add timeout for authentication check
     const authTimeout = setTimeout(() => {
       if (authLoading) {
@@ -131,7 +129,7 @@ export default function BusinessDashboard() {
         }
       }
     }, 10000); // 10 second timeout
-
+    
     if (!authLoading) {
       clearTimeout(authTimeout);
       if (!isAuthenticated || !user) {
@@ -139,29 +137,24 @@ export default function BusinessDashboard() {
         router.push('/auth/login');
         return;
       }
-
       if (user.role !== 'business') {
         console.log('BusinessDashboard - Wrong role, redirecting to unauthorized');
         router.push('/unauthorized');
         return;
       }
-
       console.log('BusinessDashboard - Authentication check passed');
       setAuthChecking(false);
     }
-
     return () => clearTimeout(authTimeout);
   }, [isAuthenticated, authLoading, user, token, router]);
 
   // Update the data fetching useEffect
   useEffect(() => {
     if (authLoading || !isAuthenticated || !user) return;
-
     const fetchData = async () => {
       try {
         setLoading(true);
         setError('');
-
         // Get token from localStorage if not available in context
         const currentToken = token || localStorage.getItem('authToken');
         
@@ -171,14 +164,13 @@ export default function BusinessDashboard() {
           setLoading(false);
           return;
         }
-
         // Add timeout for data fetching
         const fetchTimeout = setTimeout(() => {
           console.log('BusinessDashboard - Data fetch timeout');
           setError('Data loading timed out. Please try again.');
           setLoading(false);
         }, 15000); // 15 second timeout
-
+        
         console.log('BusinessDashboard - Fetching jobs...');
         // Fetch jobs with authentication
         const jobsResponse = await fetch('/api/jobs', {
@@ -189,7 +181,6 @@ export default function BusinessDashboard() {
           },
           credentials: 'include',
         });
-
         console.log('BusinessDashboard - Jobs response status:', jobsResponse.status);
         if (jobsResponse.ok) {
           const jobsData = await jobsResponse.json();
@@ -200,7 +191,7 @@ export default function BusinessDashboard() {
           console.error('BusinessDashboard - Jobs fetch error:', errorData);
           setError(errorData.error || 'Failed to fetch jobs');
         }
-
+        
         console.log('BusinessDashboard - Fetching proposals...');
         // Fetch proposals with authentication
         const proposalsResponse = await fetch('/api/proposals', {
@@ -211,7 +202,6 @@ export default function BusinessDashboard() {
           },
           credentials: 'include',
         });
-
         console.log('BusinessDashboard - Proposals response status:', proposalsResponse.status);
         if (proposalsResponse.ok) {
           const proposalsData = await proposalsResponse.json();
@@ -225,7 +215,6 @@ export default function BusinessDashboard() {
             setError(errorData.error || 'Failed to fetch proposals');
           }
         }
-
         clearTimeout(fetchTimeout);
       } catch (err) {
         console.error('BusinessDashboard - Fetch error:', err);
@@ -234,7 +223,6 @@ export default function BusinessDashboard() {
         setLoading(false);
       }
     };
-
     fetchData();
   }, [authLoading, isAuthenticated, user, token]);
 
@@ -243,17 +231,25 @@ export default function BusinessDashboard() {
     setShowCreateForm(false);
   };
 
-  // In BusinessDashboard.tsx
-
-  // Update handleStatusChange
+  // Updated handleStatusChange with better error handling
   const handleStatusChange = async (proposalId: string, newStatus: ApplicationStatus) => {
+    // Prevent multiple simultaneous updates
+    if (updatingStatus) return;
+    
+    setUpdatingStatus(proposalId);
     try {
       const currentToken = token || localStorage.getItem('authToken');
       if (!currentToken) {
-        setError('Authentication token not available');
+        toast({
+          title: "Authentication Error",
+          description: "Authentication token not available",
+          variant: "destructive"
+        });
         return;
       }
-
+      
+      console.log(`Updating proposal ${proposalId} status to ${newStatus}`);
+      
       const response = await fetch(`/api/proposals/${proposalId}`, {
         method: 'PUT',
         headers: {
@@ -263,24 +259,39 @@ export default function BusinessDashboard() {
         credentials: 'include',
         body: JSON.stringify({ status: newStatus }),
       });
-
+      
+      const data = await response.json();
+      
       if (response.ok) {
         setProposals((prev) =>
           prev.map((proposal) =>
             proposal._id === proposalId ? { ...proposal, status: newStatus } : proposal
           )
         );
+        
+        toast({
+          title: "Status Updated",
+          description: `Proposal has been ${newStatus}`,
+        });
       } else {
-        const errorData = await response.json();
-        setError(errorData.error || 'Failed to update proposal status');
+        console.error('Failed to update proposal status:', data);
+        toast({
+          title: "Update Failed",
+          description: data.error || 'Failed to update proposal status',
+          variant: "destructive"
+        });
       }
     } catch (error) {
       console.error('Failed to update proposal status:', error);
-      setError('Failed to update proposal status');
+      toast({
+        title: "Update Failed",
+        description: 'Network error. Please try again.',
+        variant: "destructive"
+      });
+    } finally {
+      setUpdatingStatus(null);
     }
   };
-
-  // Update handleCreateJobPost
 
   const getStatusBadge = (status: ApplicationStatus) => {
     switch (status) {
@@ -312,18 +323,16 @@ export default function BusinessDashboard() {
       const jobData = {
         title: newJobPost.title,
         description: newJobPost.description,
-        skillsRequired: newJobPost.skillsRequired.split(",").map((skill) => skill.trim()),
+        skills: newJobPost.skills.split(",").map((skill) => skill.trim()),
         budgetMin: Number(newJobPost.budgetMin),
         budgetMax: Number(newJobPost.budgetMax),
         milestones: [],
       };
-
       const currentToken = token || localStorage.getItem('authToken');
       if (!currentToken) {
         setError('Authentication token not available');
         return;
       }
-
       const response = await fetch('/api/jobs', {
         method: 'POST',
         headers: {
@@ -333,14 +342,13 @@ export default function BusinessDashboard() {
         credentials: 'include',
         body: JSON.stringify(jobData),
       });
-
       if (response.ok) {
         const data = await response.json();
         setJobs([data.job, ...jobs]);
         setNewJobPost({
           title: "",
           description: "",
-          skillsRequired: "",
+          skills: "",
           budgetMin: "",
           budgetMax: "",
         });
@@ -357,7 +365,6 @@ export default function BusinessDashboard() {
 
   const handleSendMessage = (applicationId: string) => {
     if (!newMessage.trim()) return;
-
     const message: ChatMessage = {
       id: Date.now().toString(),
       senderId: "business",
@@ -366,10 +373,8 @@ export default function BusinessDashboard() {
       timestamp: new Date().toISOString(),
       isFromBusiness: true,
     };
-
     setChatConversations((prev) => {
       const existingConv = prev.find(conv => conv.applicationId === applicationId);
-
       if (existingConv) {
         return prev.map(conv =>
           conv.applicationId === applicationId
@@ -387,7 +392,6 @@ export default function BusinessDashboard() {
         ];
       }
     });
-
     setNewMessage("");
   };
 
@@ -425,7 +429,6 @@ export default function BusinessDashboard() {
     onPageChange: (page: number) => void;
   }) => {
     if (totalPages <= 1) return null;
-
     return (
       <div className="flex items-center justify-between mt-4">
         <div className="text-sm text-muted-foreground">
@@ -536,20 +539,17 @@ export default function BusinessDashboard() {
             </Button>
           </nav>
         </aside>
-
         <Tabs defaultValue="proposals" className="w-full">
           <TabsList className="mb-6">
             <TabsTrigger value="proposals">Proposals</TabsTrigger>
             <TabsTrigger value="jobs">Job Posts</TabsTrigger>
             <TabsTrigger value="chat">Chat</TabsTrigger>
           </TabsList>
-
           <TabsContent value="proposals" className="space-y-6">
             <div>
               <h2 className="text-2xl font-bold mb-2">Job Proposals</h2>
               <p className="text-muted-foreground">Review and manage student proposals for your job postings</p>
             </div>
-
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Card>
@@ -580,7 +580,6 @@ export default function BusinessDashboard() {
                 </CardContent>
               </Card>
             </div>
-
             {/* Proposals Table */}
             <Card>
               <CardHeader>
@@ -689,17 +688,37 @@ export default function BusinessDashboard() {
                                       size="sm"
                                       onClick={() => handleStatusChange(proposal._id, "accepted")}
                                       className="bg-green-600 hover:bg-green-700"
+                                      disabled={updatingStatus === proposal._id}
                                     >
-                                      <CheckCircle className="h-4 w-4 mr-1" />
-                                      Accept
+                                      {updatingStatus === proposal._id ? (
+                                        <>
+                                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1"></div>
+                                          Processing...
+                                        </>
+                                      ) : (
+                                        <>
+                                          <CheckCircle className="h-4 w-4 mr-1" />
+                                          Accept
+                                        </>
+                                      )}
                                     </Button>
                                     <Button
                                       size="sm"
                                       variant="destructive"
                                       onClick={() => handleStatusChange(proposal._id, "rejected")}
+                                      disabled={updatingStatus === proposal._id}
                                     >
-                                      <XCircle className="h-4 w-4 mr-1" />
-                                      Reject
+                                      {updatingStatus === proposal._id ? (
+                                        <>
+                                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1"></div>
+                                          Processing...
+                                        </>
+                                      ) : (
+                                        <>
+                                          <XCircle className="h-4 w-4 mr-1" />
+                                          Reject
+                                        </>
+                                      )}
                                     </Button>
                                   </>
                                 )}
@@ -719,7 +738,6 @@ export default function BusinessDashboard() {
               </CardContent>
             </Card>
           </TabsContent>
-
           <TabsContent value="jobs" className="space-y-6">
             <div className="flex items-center justify-between">
               <div>
@@ -731,7 +749,6 @@ export default function BusinessDashboard() {
                 Create Job Post
               </Button>
             </div>
-
             {showCreateForm && (
               <Card>
                 <CardHeader>
@@ -742,23 +759,22 @@ export default function BusinessDashboard() {
                 </CardContent>
               </Card>
             )}
-
             <div className="grid gap-4">
-                          {jobs.length === 0 ? (
-              <Card>
-                <CardContent className="text-center py-8">
-                  <div className="mb-4">
-                    <Building2 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold mb-2">Welcome to your Business Dashboard!</h3>
-                    <p className="text-muted-foreground mb-4">Get started by creating your first job posting to attract talented students.</p>
-                  </div>
-                  <Button onClick={() => setShowCreateForm(true)} className="bg-blue-600 hover:bg-blue-700">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create Your First Job Post
-                  </Button>
-                </CardContent>
-              </Card>
-            ) : (
+              {jobs.length === 0 ? (
+                <Card>
+                  <CardContent className="text-center py-8">
+                    <div className="mb-4">
+                      <Building2 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                      <h3 className="text-lg font-semibold mb-2">Welcome to your Business Dashboard!</h3>
+                      <p className="text-muted-foreground mb-4">Get started by creating your first job posting to attract talented students.</p>
+                    </div>
+                    <Button onClick={() => setShowCreateForm(true)} className="bg-blue-600 hover:bg-blue-700">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create Your First Job Post
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : (
                 getPaginatedJobPosts().map((job) => (
                   <Card key={job._id}>
                     <CardHeader>
@@ -777,7 +793,7 @@ export default function BusinessDashboard() {
                     <CardContent>
                       <p className="text-sm text-muted-foreground mb-3">{job.description}</p>
                       <div className="flex flex-wrap gap-1 mb-3">
-                        {Array.isArray(job.skillsRequired) ? job.skillsRequired.map((skill: string, index: number) => (
+                        {Array.isArray(job.skills) ? job.skills.map((skill: string, index: number) => (
                           <Badge key={index} variant="outline" className="text-xs">
                             {skill}
                           </Badge>
@@ -791,7 +807,6 @@ export default function BusinessDashboard() {
                 ))
               )}
             </div>
-
             {jobs.length > 0 && (
               <PaginationControls
                 currentPage={jobPostsPage}
@@ -800,13 +815,11 @@ export default function BusinessDashboard() {
               />
             )}
           </TabsContent>
-
           <TabsContent value="chat" className="space-y-6">
             <div>
               <h2 className="text-2xl font-bold mb-2">Chat with Accepted Candidates</h2>
               <p className="text-muted-foreground">Communicate with students who have been accepted for positions</p>
             </div>
-
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[600px]">
               {/* Chat List */}
               <Card className="lg:col-span-1">
@@ -848,7 +861,6 @@ export default function BusinessDashboard() {
                   )}
                 </CardContent>
               </Card>
-
               {/* Chat Window */}
               <Card className="lg:col-span-2">
                 {selectedChat ? (

@@ -93,6 +93,21 @@ function JobDetailsPage() {
               )}
             </div>
           </div>
+
+          {/* Always show the proposal form for testing */}
+      {user?.role === 'student' && (
+        <div id="proposal-form" className="bg-white rounded-lg shadow-md p-6">
+          <h2 className="text-xl font-semibold mb-4">Submit Your Proposal</h2>
+          <ProposalForm 
+            jobId={jobId}
+            jobMilestones={job.milestones} // Pass job milestones
+            onProposalSubmitted={() => {
+              setHasApplied(true);
+              setProposalStatus('pending');
+            }}
+          />
+        </div>
+      )}
           
           {user?.role === 'student' && !hasApplied && (
             <Button onClick={() => {
@@ -111,9 +126,9 @@ function JobDetailsPage() {
         <div className="mb-6">
           <h2 className="text-lg font-semibold mb-2">Skills Required</h2>
           <div className="flex flex-wrap gap-2">
-            {job.skillsRequired.map((skill, index) => (
+            {job.skills.map((skills, index) => (
               <span key={index} className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
-                {skill}
+                {skills}
               </span>
             ))}
           </div>
@@ -138,6 +153,9 @@ function JobDetailsPage() {
           <h2 className="text-xl font-semibold mb-4">Submit Your Proposal</h2>
           <ProposalForm 
             jobId={jobId}
+            jobMilestones={job.milestones}
+            budgetMin={job.budgetMin}
+            budgetMax={job.budgetMax}
             onProposalSubmitted={() => {
               setHasApplied(true);
               setProposalStatus('pending');

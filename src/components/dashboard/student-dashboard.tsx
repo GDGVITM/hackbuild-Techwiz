@@ -292,13 +292,13 @@ export default function StudentDashboard() {
       searchTerm === "" ||
       (job.title && job.title.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (job.description && job.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (job.skillsRequired && job.skillsRequired.some((skill) =>
+      (job.skills && job.skills.some((skill) =>
         skill.toLowerCase().includes(searchTerm.toLowerCase())
       ));
 
     // Filter by skill
     const matchesSkill =
-      skillFilter === "all" || (job.skillsRequired && job.skillsRequired.includes(skillFilter));
+      skillFilter === "all" || (job.skills && job.skills.includes(skillFilter));
 
     // Filter by budget
     let matchesBudget = true;
@@ -327,8 +327,8 @@ export default function StudentDashboard() {
   const getAllSkills = () => {
     const skills = new Set<string>();
     jobs.forEach((job) => {
-      if (job.skillsRequired) {
-        job.skillsRequired.forEach((skill) => skills.add(skill));
+      if (job.skills) {
+        job.skills.forEach((skill) => skills.add(skill));
       }
     });
     return Array.from(skills).sort();
@@ -801,7 +801,7 @@ export default function StudentDashboard() {
                                     Skills Required
                                   </h4>
                                   <div className="flex flex-wrap gap-2">
-                                    {(job.skillsRequired || []).map((skill, index) => (
+                                    {(job.skills || []).map((skill, index) => (
                                       <Badge key={index} variant="secondary">
                                         {skill}
                                       </Badge>
@@ -851,14 +851,14 @@ export default function StudentDashboard() {
                     <CardContent>
                       <p className="text-slate-600 mb-4">{job.description || "No description provided"}</p>
                       <div className="flex flex-wrap gap-2">
-                        {(job.skillsRequired || []).slice(0, 4).map((skill, index) => (
+                        {(job.skills || []).slice(0, 4).map((skill, index) => (
                           <Badge key={index} variant="secondary">
                             {skill}
                           </Badge>
                         ))}
-                        {(job.skillsRequired || []).length > 4 && (
+                        {(job.skills || []).length > 4 && (
                           <Badge variant="secondary">
-                            +{(job.skillsRequired || []).length - 4} more
+                            +{(job.skills || []).length - 4} more
                           </Badge>
                         )}
                       </div>

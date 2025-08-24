@@ -158,9 +158,9 @@ function BusinessJobDetailsPage() {
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-2">
-                {job.skillsRequired.map((skill, index) => (
+                {job.skills.map((skills, index) => (
                   <Badge key={index} variant="secondary">
-                    {skill}
+                    {skills}
                   </Badge>
                 ))}
               </div>

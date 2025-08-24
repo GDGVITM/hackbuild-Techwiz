@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
       description,
       budgetMin,
       budgetMax,
-      skillsRequired,
+      skills,
       milestones,
       businessId
     } = await request.json();
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
       description,
       budgetMin: Number(budgetMin),
       budgetMax: Number(budgetMax),
-      skills: skillsRequired || [],
+      skills: skills || [],
       milestones: milestones || [],
       businessId
     });

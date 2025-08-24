@@ -24,7 +24,7 @@ interface Contract {
   description: string;
   content?: string;
   createdAt: string;
-  status: 'draft' | 'pending_student_review' | 'signed' | 'completed' | 'changes_requested';
+  status: 'draft' | 'pending' | 'signed' | 'completed' | 'changes_requested';
   changeRequests?: ChangeRequest[];
   proposalId: string;
   terms: string;
@@ -188,7 +188,7 @@ export default function ContractDetailPage() {
     switch (status) {
       case 'draft': 
         return <Badge variant="secondary">Draft</Badge>;
-      case 'pending_student_review': 
+      case 'pending': 
         return <Badge variant="outline">Pending Your Review</Badge>;
       case 'signed': 
         return <Badge className="bg-green-500">Signed</Badge>;
@@ -339,7 +339,7 @@ export default function ContractDetailPage() {
           </div>
           
           {/* Action Buttons */}
-          {contract.status === 'pending_student_review' && (
+          {contract.status === 'pending' && (
             <div className="flex gap-3 mt-6">
               <Button 
                 onClick={handleAcceptContract}

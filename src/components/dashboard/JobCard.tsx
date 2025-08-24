@@ -61,14 +61,14 @@ export default function JobCard({ job }: JobCardProps) {
         {/* Skills */}
         <div className="mb-4">
           <div className="flex flex-wrap gap-1.5">
-            {job.skillsRequired.slice(0, 3).map((skill, index) => (
+            {job.skills.slice(0, 3).map((skill, index) => (
               <Badge key={index} variant="outline" className="text-xs bg-blue-50 border-blue-200 text-blue-700">
                 {skill}
               </Badge>
             ))}
-            {job.skillsRequired.length > 3 && (
+            {job.skills.length > 3 && (
               <Badge variant="outline" className="text-xs bg-gray-50 border-gray-200 text-gray-600">
-                +{job.skillsRequired.length - 3} more
+                +{job.skills.length - 3} more
               </Badge>
             )}
           </div>

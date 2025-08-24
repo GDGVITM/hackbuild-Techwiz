@@ -146,7 +146,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body: ProposalData = await request.json();
-    const { jobId, coverLetter, milestones, quoteAmount } = body;
+    const { jobId, coverLetter, milestones = [], quoteAmount } = body;
 
     if (!jobId || !coverLetter || !quoteAmount) {
       return NextResponse.json(
@@ -155,7 +155,47 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // ✅ Validate milestones vs. quote amount
+    if (milestones.length > 0) {
+      // Sanitize milestone amounts
+      const sanitizedMilestones = milestones.map(m => ({
+        ...m,
+        amount: Number(m.amount)
+      }));
+
+      // Check each milestone
+      for (const milestone of sanitizedMilestones) {
+        if (!milestone.title || !milestone.dueDate || isNaN(milestone.amount) || milestone.amount <= 0) {
+          return NextResponse.json(
+            { error: 'Each milestone must have a title, positive numeric amount, and due date' },
+            { status: 400 }
+          );
+        }
+      }
+
+      const totalMilestoneAmount = sanitizedMilestones.reduce((sum, m) => sum + m.amount, 0);
+
+      if (isNaN(totalMilestoneAmount)) {
+        return NextResponse.json(
+          { error: 'Milestone amounts must be valid numbers' },
+          { status: 400 }
+        );
+      }
+
+      if (Math.abs(totalMilestoneAmount - Number(quoteAmount)) > 0.01) {
+        return NextResponse.json(
+          { 
+            error: `Total milestone amounts ($${totalMilestoneAmount.toFixed(2)}) must equal the quote amount ($${Number(quoteAmount).toFixed(2)})`
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     await dbConnect();
+
+    
+    
 
     // Verify the job exists and is open
     const job = await Job.findById(jobId);
@@ -165,6 +205,14 @@ export async function POST(request: NextRequest) {
 
     if (job.status !== 'open') {
       return NextResponse.json({ error: 'Job is not open for proposals' }, { status: 400 });
+    }
+
+    // NEW: Validate quote amount is within job's budget range
+    if (quoteAmount < job.budgetMin || quoteAmount > job.budgetMax) {
+      return NextResponse.json(
+        { error: `Quote amount must be between $${job.budgetMin} and $${job.budgetMax}` },
+        { status: 400 }
+      );
     }
 
     // Check if student already has a proposal for this job
@@ -184,7 +232,7 @@ export async function POST(request: NextRequest) {
       jobId,
       studentId: user.userId,
       coverLetter,
-      milestones: milestones || [],
+      milestones,
       quoteAmount,
       status: 'pending'
     });
@@ -197,3 +245,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to create proposal' }, { status: 500 });
   }
 }
+
