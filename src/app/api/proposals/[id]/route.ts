@@ -7,9 +7,8 @@ import { verifyToken } from '@/lib/auth/jwt';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> } // params is a Promise
 ) {
-
   try {
     let user = getUserFromRequest(request);
     if (!user) {
@@ -23,25 +22,28 @@ export async function GET(
     if (!user) {
       return createUnauthorizedResponse('Authentication required');
     }
-
+    
     await dbConnect();
-    const proposalId = params.id;
-
+    
+    // Await the params before accessing its properties
+    const { id } = await params;
+    const proposalId = id;
+    
     const proposal = await Proposal.findById(proposalId)
       .populate('jobId', 'title description businessId')
       .populate('studentId', 'name email')
       .populate('contractId');
-
+    
     if (!proposal) {
       return NextResponse.json({ error: 'Proposal not found' }, { status: 404 });
     }
-
+    
     // Check if user has permission to view this proposal
     const job = await Job.findById(proposal.jobId._id);
     if (!job) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 });
     }
-
+    
     // Allow access if user is the student who submitted the proposal or the business owner
     if (
       proposal.studentId._id.toString() !== user.userId &&
@@ -49,7 +51,7 @@ export async function GET(
     ) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
-
+    
     return NextResponse.json({ proposal });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch proposal' }, { status: 500 });
@@ -58,16 +60,24 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
-    const user = getUserFromRequest(request);
+    let user = getUserFromRequest(request);
+    if (!user) {
+      // Try to verify JWT from cookie (or Authorization header if present)
+      const { verifyAuthToken } = await import('@/lib/utils/auth');
+      const payload = await verifyAuthToken(request);
+      if (payload) {
+        user = { userId: payload.userId, role: payload.role as 'student' | 'business' };
+      }
+    }
     if (!user) {
       return createUnauthorizedResponse('Authentication required');
     }
 
-    const { userId, role } = verifyToken(token);
-    const { id: proposalId } = await params;
+    await dbConnect();
+    const proposalId = params.id;
     const { status, reason } = await request.json();
 
     const proposal = await Proposal.findById(proposalId);
