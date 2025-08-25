@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { signToken } from '@/lib/auth/jwt';
-import { comparePassword } from '@/lib/auth/password'; // Now this import will work
+import { comparePassword } from '@/lib/auth/password';
+import { createAuthResponse } from '@/lib/utils/cookies';
 import User from '@/lib/models/User';
 import dbConnect from '@/lib/db/mongoose';
 
@@ -8,52 +9,62 @@ export async function POST(request: NextRequest) {
   try {
     // Establish database connection
     await dbConnect();
-    
+
     const { email, password } = await request.json();
-    
+
     // Validate input
     if (!email || !password) {
       return NextResponse.json({
         error: 'Email and password are required'
       }, { status: 400 });
     }
-    
+
     // Find user by email
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email }).select('+password');
     if (!user) {
-      return NextResponse.json({ 
-        error: 'Invalid email or password' 
+      return NextResponse.json({
+        error: 'Invalid email or password'
       }, { status: 401 });
     }
-    
+
     // Compare passwords
     const isPasswordValid = await comparePassword(password, user.password);
     if (!isPasswordValid) {
-      return NextResponse.json({ 
-        error: 'Invalid email or password' 
+      return NextResponse.json({
+        error: 'Invalid email or password'
       }, { status: 401 });
     }
-    
+
     // Create JWT token
-    const token = signToken({ 
-      userId: user._id.toString(), 
-      role: user.role 
+    const token = await signToken({
+      userId: user._id.toString(),
+      role: user.role,
+      email: user.email
     });
-    
-    return NextResponse.json({
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        phone: user.phone
-      },
-      token
-    });
+
+    // Prepare user data for response
+    const userData = {
+      id: user._id.toString(),
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      phone: user.phone
+    };
+
+    // Create response with cookies and include token in response body
+    const response = createAuthResponse({
+      success: true,
+      user: userData,
+      token: token, // Include token in response body for client-side access
+      message: 'Login successful'
+    }, token, userData);
+
+    return response;
+
   } catch (error) {
     console.error('Login error:', error);
-    return NextResponse.json({ 
-      error: 'Login failed' 
+    return NextResponse.json({
+      error: 'Login failed. Please try again.'
     }, { status: 500 });
   }
 }

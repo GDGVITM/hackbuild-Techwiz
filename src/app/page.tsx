@@ -9,22 +9,23 @@ export default function Home() {
             <span className="text-blue-600">Students</span>
           </h1>
           <p className="text-xl md:text-2xl text-gray-600 mb-8 max-w-3xl mx-auto">
-            Connect with businesses, build your portfolio, and earn money while studying. 
+            Connect with businesses, build your portfolio, and earn money while studying.
             The perfect platform for student freelancers.
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
-            <a 
-              href="/auth/register" 
+            <a
+              href="/auth/register"
               className="bg-blue-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-blue-700 transition-colors"
             >
               Get Started
             </a>
-            <a 
-              href="/explore" 
+            <a
+              href="/explore"
               className="bg-white text-blue-600 border-2 border-blue-600 px-8 py-4 rounded-lg text-lg font-semibold hover:bg-blue-50 transition-colors"
             >
               Browse Jobs
             </a>
+
           </div>
         </div>
       </section>
@@ -93,8 +94,8 @@ export default function Home() {
           <p className="text-xl text-blue-100 mb-8 max-w-2xl mx-auto">
             Join thousands of students already earning money and building their careers
           </p>
-          <a 
-            href="/auth/register" 
+          <a
+            href="/auth/register"
             className="bg-white text-blue-600 px-8 py-4 rounded-lg text-lg font-semibold hover:bg-gray-50 transition-colors"
           >
             Sign Up Now - It's Free

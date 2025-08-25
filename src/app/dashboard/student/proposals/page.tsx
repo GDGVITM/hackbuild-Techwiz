@@ -70,7 +70,7 @@ interface Proposal {
   quoteAmount: number;
   status: "pending" | "accepted" | "rejected" | "withdrawn";
   submittedAt: string;
-  contract?: Contract;
+  contract?: Contract | null;
 }
 
 export default function StudentProposalsPage() {
@@ -135,7 +135,7 @@ export default function StudentProposalsPage() {
       }
       const data = await response.json();
       let newProposals = data.proposals || [];
-      
+
       // Fetch job details for proposals that have jobId as a string
       const proposalsWithJobs = await Promise.all(
         newProposals.map(async (proposal: Proposal) => {
@@ -156,7 +156,7 @@ export default function StudentProposalsPage() {
           return proposal;
         })
       );
-      
+
       // Check for status changes
       if (previousProposals.length > 0) {
         proposalsWithJobs.forEach((newProposal: Proposal) => {
@@ -349,12 +349,14 @@ export default function StudentProposalsPage() {
   // Filter and sort proposals
   useEffect(() => {
     let filtered = proposals;
+
     // Filter by status
     if (statusFilter !== "all") {
       filtered = filtered.filter(
         (proposal) => proposal.status === statusFilter
       );
     }
+
     // Filter by search term
     if (searchTerm) {
       filtered = filtered.filter(
@@ -362,13 +364,14 @@ export default function StudentProposalsPage() {
           // Fix: Add null check before accessing properties
           const jobTitle = proposal.jobId && typeof proposal.jobId === 'object' ? proposal.jobId.title : '';
           const businessName = proposal.jobId && typeof proposal.jobId === 'object' ? proposal.jobId.businessId.name : '';
-          
+
           return jobTitle.toLowerCase().includes(searchTerm.toLowerCase()) ||
             businessName.toLowerCase().includes(searchTerm.toLowerCase()) ||
             proposal.coverLetter.toLowerCase().includes(searchTerm.toLowerCase());
         }
       );
     }
+
     // Sort proposals
     filtered.sort((a, b) => {
       switch (sortBy) {
@@ -390,6 +393,7 @@ export default function StudentProposalsPage() {
           return 0;
       }
     });
+
     setFilteredProposals(filtered);
   }, [proposals, searchTerm, statusFilter, sortBy]);
 
@@ -471,6 +475,14 @@ export default function StudentProposalsPage() {
   if (proposals.length === 0) {
     return (
       <div className="container mx-auto px-4 py-8">
+        <div className="mb-4">
+          <Link href="/dashboard/student" className="inline-flex items-center text-sm text-gray-600 hover:text-gray-900">
+            <svg xmlns="http://www.w3.org/2000/svg" className="mr-2 h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+            </svg>
+            Back to Dashboard
+          </Link>
+        </div>
         <h1 className="text-2xl font-bold mb-6">My Proposals</h1>
         <div className="text-center py-16">
           <div className="mb-4">
@@ -602,7 +614,7 @@ export default function StudentProposalsPage() {
             const jobTitle = proposal.jobId && typeof proposal.jobId === 'object' ? proposal.jobId.title : "Unknown Job";
             const businessName = proposal.jobId && typeof proposal.jobId === 'object' ? proposal.jobId.businessId.name : "Unknown Business";
             const jobId = proposal.jobId && typeof proposal.jobId === 'object' ? proposal.jobId._id : proposal.jobId || "unknown";
-            
+
             return (
               <Card
                 key={proposal._id}
@@ -715,11 +727,10 @@ export default function StudentProposalsPage() {
                                           ? "default"
                                           : "outline"
                                       }
-                                      className={`text-xs ${
-                                        cr.status === "resolved"
+                                      className={`text-xs ${cr.status === "resolved"
                                           ? "bg-green-100 text-green-800"
                                           : "text-orange-700 border-orange-300"
-                                      }`}
+                                        }`}
                                     >
                                       {cr.status === "resolved"
                                         ? "Resolved"
@@ -775,7 +786,7 @@ export default function StudentProposalsPage() {
                               }
                             >
                               {contractActionLoading ===
-                              proposal.contract!._id ? (
+                                proposal.contract!._id ? (
                                 <>
                                   <svg
                                     className="animate-spin -ml-1 mr-1 h-4 w-4 text-white"

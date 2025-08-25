@@ -17,10 +17,13 @@ interface Milestone {
 
 interface ProposalFormProps {
   jobId: string;
+  jobMilestones?: { title: string; amount: number; dueDate: string }[]; // Add this prop
+  budgetMin?: number; // Add this
+  budgetMax?: number; // Add this
   onProposalSubmitted?: () => void;
 }
 
-export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFormProps) {
+export default function ProposalForm({ jobId, jobMilestones, budgetMin, budgetMax, onProposalSubmitted }: ProposalFormProps) {
   const [coverLetter, setCoverLetter] = useState('');
   const [milestones, setMilestones] = useState<Milestone[]>([
     { title: '', amount: 0, dueDate: '' }
@@ -29,6 +32,7 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [totalMilestoneAmount, setTotalMilestoneAmount] = useState(0);
+  const [budgetError, setBudgetError] = useState('');
   const [validationStatus, setValidationStatus] = useState<'valid' | 'invalid' | 'empty'>('empty');
   const { token } = useAuth();
 
@@ -36,7 +40,14 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
   useEffect(() => {
     const total = milestones.reduce((sum, m) => sum + Number(m.amount), 0);
     setTotalMilestoneAmount(total);
-    
+
+    if (jobMilestones && jobMilestones.length > 0) {
+      setMilestones(jobMilestones);
+      // Calculate total from job milestones
+      const total = jobMilestones.reduce((sum, m) => sum + m.amount, 0);
+      setQuoteAmount(total.toString());
+    }
+
     // Update validation status
     if (total === 0 && !quoteAmount) {
       setValidationStatus('empty');
@@ -45,7 +56,20 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
     } else {
       setValidationStatus('invalid');
     }
-  }, [milestones, quoteAmount]);
+  }, [milestones, quoteAmount, jobMilestones]);
+
+
+  // Validate quote amount against budget range
+  useEffect(() => {
+    if (quoteAmount && budgetMin && budgetMax) {
+      const quote = Number(quoteAmount);
+      if (quote < budgetMin || quote > budgetMax) {
+        setBudgetError(`Quote amount must be between $${budgetMin} and $${budgetMax}`);
+      } else {
+        setBudgetError('');
+      }
+    }
+  }, [quoteAmount, budgetMin, budgetMax]);
 
   const handleMilestoneChange = (index: number, field: keyof Milestone, value: string | number) => {
     const updatedMilestones = [...milestones];
@@ -68,20 +92,22 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
 
   const distributeEvenly = () => {
     if (!quoteAmount || milestones.length === 0) return;
-    
+
     const amountPerMilestone = Number(quoteAmount) / milestones.length;
     const updatedMilestones = milestones.map(milestone => ({
       ...milestone,
       amount: parseFloat(amountPerMilestone.toFixed(2))
     }));
-    
+
     setMilestones(updatedMilestones);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
+
     e.preventDefault();
     setError('');
     setLoading(true);
+    console.log('Token in ProposalForm:', token);
 
     try {
       if (!token) {
@@ -90,10 +116,26 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
       }
 
       // Validate milestone amounts match quote amount
-      if (validationStatus === 'invalid') {
-        setError('Total milestone amounts must equal the quote amount');
+      // if (validationStatus === 'invalid') {
+      //   setError('Total milestone amounts must equal the quote amount');
+      //   return;
+      // }
+      // Validate milestone amounts match quote amount
+    const total = milestones.reduce((sum, m) => sum + Number(m.amount), 0);
+    const quote = Number(quoteAmount);
+    
+    if (Math.abs(total - quote) > 0.01) {
+      setError(`Total milestone amounts ($${total.toFixed(2)}) must equal the quote amount ($${quote.toFixed(2)})`);
+      return;
+    }
+
+    // Validate all milestones have required fields
+    for (const milestone of milestones) {
+      if (!milestone.title.trim() || Number(milestone.amount) <= 0 || !milestone.dueDate) {
+        setError('All milestones must have a title, positive amount, and due date');
         return;
       }
+    }
 
       const proposalData = {
         jobId,
@@ -106,12 +148,16 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
         quoteAmount: Number(quoteAmount),
       };
 
+      console.log("Milestone total:", total, "Quote:", quote);
+console.log("Validation status:", validationStatus);
+
       const response = await fetch('/api/proposals', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
+        credentials: 'include',
         body: JSON.stringify(proposalData),
       });
 
@@ -140,12 +186,13 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
   };
 
   const getValidationText = () => {
-    switch (validationStatus) {
-      case 'valid': return '✓ Amounts match perfectly!';
-      case 'invalid': return `⚠️ Difference: $${Math.abs(totalMilestoneAmount - Number(quoteAmount || 0)).toFixed(2)}`;
-      default: return 'Enter amounts to validate';
-    }
-  };
+  switch (validationStatus) {
+    case 'valid': return '✓ Amounts match perfectly!';
+    case 'invalid': return `⚠️ Difference: $${Math.abs(totalMilestoneAmount - Number(quoteAmount || 0)).toFixed(2)}`;
+    case 'empty': return '⚠️ Enter amounts to validate';
+    default: return 'Enter amounts to validate';
+  }
+};
 
   return (
     <Card>
@@ -158,7 +205,7 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
             {error}
           </div>
         )}
-        
+
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <Label htmlFor="coverLetter">Cover Letter</Label>
@@ -172,9 +219,16 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
               required
             />
           </div>
-          
+
           <div>
-            <Label htmlFor="quoteAmount">Total Quote Amount ($)</Label>
+            <Label htmlFor="quoteAmount">
+              Total Quote Amount ($) 
+              {budgetMin && budgetMax && (
+                <span className="text-sm text-gray-500 ml-2">
+                  (Budget: ${budgetMin} - ${budgetMax})
+                </span>
+              )}
+            </Label>
             <Input
               id="quoteAmount"
               type="number"
@@ -185,7 +239,7 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
               required
             />
           </div>
-          
+
           <div>
             <div className="flex justify-between items-center mb-2">
               <Label>Milestones</Label>
@@ -198,7 +252,7 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
                 </Button>
               </div>
             </div>
-            
+
             {/* Validation Status */}
             <div className={`mb-4 p-3 rounded-md border ${getValidationColor()}`}>
               <div className="flex justify-between items-center">
@@ -208,7 +262,7 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
                 <span className="text-sm">{getValidationText()}</span>
               </div>
             </div>
-            
+
             {milestones.map((milestone, index) => (
               <div key={index} className="border rounded-md p-3 mb-3">
                 <div className="flex justify-between items-center mb-2">
@@ -224,7 +278,7 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
                     </Button>
                   )}
                 </div>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div>
                     <Label htmlFor={`milestone-title-${index}`}>Title</Label>
@@ -236,7 +290,7 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
                       required
                     />
                   </div>
-                  
+
                   <div>
                     <Label htmlFor={`milestone-amount-${index}`}>Amount ($)</Label>
                     <Input
@@ -249,7 +303,7 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
                       required
                     />
                   </div>
-                  
+
                   <div>
                     <Label htmlFor={`milestone-date-${index}`}>Due Date</Label>
                     <Input
@@ -264,14 +318,20 @@ export default function ProposalForm({ jobId, onProposalSubmitted }: ProposalFor
               </div>
             ))}
           </div>
-          
-          <Button 
-            type="submit" 
-            disabled={loading || validationStatus === 'invalid'} 
-            className="w-full"
-          >
-            {loading ? 'Submitting...' : 'Submit Proposal'}
-          </Button>
+
+          <Button
+  type="submit"
+  disabled={
+    loading ||
+    !quoteAmount ||
+    milestones.some(m => !m.title || !m.dueDate || m.amount <= 0) ||
+    Math.abs(totalMilestoneAmount - Number(quoteAmount)) > 0.01
+  }
+  className="w-full"
+>
+  {loading ? "Submitting..." : "Submit Proposal"}
+</Button>
+
         </form>
       </CardContent>
     </Card>

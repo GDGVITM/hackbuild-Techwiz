@@ -3,11 +3,11 @@ import { StudentProfile } from '@/types/student';
 
 export function calculateMatchScore(job: Job, student: StudentProfile): number {
   // Calculate skill overlap
-  const skillOverlap = job.skillsRequired.filter(skill => 
+  const skillOverlap = job.skills.filter(skill => 
     student.skills.includes(skill)
   ).length;
   
-  const skillScore = job.skillsRequired.length > 0 ? skillOverlap / job.skillsRequired.length : 0;
+  const skillScore = job.skills.length > 0 ? skillOverlap / job.skills.length : 0;
   
   // Availability score (1 if available, 0 if not)
   const availabilityScore = student.availability.hoursPerWeek > 0 ? 1 : 0;

@@ -1,41 +1,57 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getUserFromRequest, createUnauthorizedResponse, createForbiddenResponse } from '@/lib/utils/auth';
 import Proposal from '@/lib/models/Proposal';
 import Job from '@/lib/models/Job';
+import dbConnect from '@/lib/db/mongoose';
 import { verifyToken } from '@/lib/auth/jwt';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> } // params is a Promise
 ) {
   try {
-    const token = request.headers.get('Authorization')?.replace('Bearer ', '');
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    let user = getUserFromRequest(request);
+    if (!user) {
+      // Try to verify JWT from Authorization header or cookie
+      const { verifyAuthToken } = await import('@/lib/utils/auth');
+      const payload = await verifyAuthToken(request);
+      if (payload) {
+        user = { userId: payload.userId, role: payload.role as 'student' | 'business' };
+      }
     }
-
-    const { userId } = verifyToken(token);
-    const { id: proposalId } = await params;
-
+    if (!user) {
+      return createUnauthorizedResponse('Authentication required');
+    }
+    
+    await dbConnect();
+    
+    // Await the params before accessing its properties
+    const { id } = await params;
+    const proposalId = id;
+    
     const proposal = await Proposal.findById(proposalId)
       .populate('jobId', 'title description businessId')
       .populate('studentId', 'name email')
       .populate('contractId');
-
+    
     if (!proposal) {
       return NextResponse.json({ error: 'Proposal not found' }, { status: 404 });
     }
-
+    
     // Check if user has permission to view this proposal
     const job = await Job.findById(proposal.jobId._id);
     if (!job) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 });
     }
-
+    
     // Allow access if user is the student who submitted the proposal or the business owner
-    if (proposal.studentId._id.toString() !== userId && job.businessId.toString() !== userId) {
+    if (
+      proposal.studentId._id.toString() !== user.userId &&
+      job.businessId.toString() !== user.userId
+    ) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
-
+    
     return NextResponse.json({ proposal });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch proposal' }, { status: 500 });
@@ -44,16 +60,24 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
-    const token = request.headers.get('Authorization')?.replace('Bearer ', '');
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    let user = getUserFromRequest(request);
+    if (!user) {
+      // Try to verify JWT from cookie (or Authorization header if present)
+      const { verifyAuthToken } = await import('@/lib/utils/auth');
+      const payload = await verifyAuthToken(request);
+      if (payload) {
+        user = { userId: payload.userId, role: payload.role as 'student' | 'business' };
+      }
+    }
+    if (!user) {
+      return createUnauthorizedResponse('Authentication required');
     }
 
-    const { userId, role } = verifyToken(token);
-    const { id: proposalId } = await params;
+    await dbConnect();
+    const proposalId = params.id;
     const { status, reason } = await request.json();
 
     const proposal = await Proposal.findById(proposalId);
@@ -63,8 +87,8 @@ export async function PUT(
 
     // Check if user is the business owner of the job
     const job = await Job.findById(proposal.jobId);
-    if (!job || job.businessId.toString() !== userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+    if (!job || job.businessId.toString() !== user.userId) {
+      return createForbiddenResponse('Unauthorized to update this proposal');
     }
 
     // Validate status
@@ -74,16 +98,16 @@ export async function PUT(
 
     // Update proposal status
     proposal.status = status;
-    
+
     // Add to status history
     if (!proposal.statusHistory) {
       proposal.statusHistory = [];
     }
-    
+
     proposal.statusHistory.push({
       status: status,
       changedAt: new Date(),
-      changedBy: userId,
+      changedBy: user.userId,
       reason: reason || `Status changed to ${status}`
     });
 
@@ -100,7 +124,7 @@ export async function PUT(
       .populate('jobId', 'title description businessId')
       .populate('studentId', 'name email');
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       proposal: updatedProposal,
       message: `Proposal status updated to ${status}`
     });

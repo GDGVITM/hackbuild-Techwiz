@@ -36,7 +36,6 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import JobDetailsPage from "../../app/dashboard/student/jobs/[id]/page";
 import {
   Search,
   MapPin,
@@ -49,9 +48,11 @@ import {
   Clock3,
   MessageCircle,
   Briefcase,
+  User,
 } from "lucide-react";
 import { useToast } from '@/hooks/use-toast';
 import { SignaturePad } from '@/components/ui/signature-pad';
+
 interface ChatConversation {
   id: string;
   company: string;
@@ -66,6 +67,34 @@ interface ChatConversation {
     timestamp: string;
   }>;
 }
+
+// Define the Proposal interface - merged both definitions
+interface Proposal {
+  _id: string;
+  jobId: string | {
+    _id: string;
+    title: string;
+    description: string;
+    budgetMin: number;
+    budgetMax: number;
+  } | null;
+  studentId: string;
+  coverLetter: string;
+  portfolio?: string;
+  availability?: string;
+  status: "pending" | "accepted" | "rejected" | "withdrawn";
+  createdAt: string;
+  updatedAt: string;
+  quoteAmount?: number;
+  milestones?: Array<{
+    title: string;
+    amount: number;
+    dueDate: string;
+  }>;
+  submittedAt?: string;
+  contractId?: Contract | null;
+}
+
 interface Contract {
   _id: string;
   title: string;
@@ -76,42 +105,34 @@ interface Contract {
   studentSignature?: string;
   businessSignedAt?: string;
   studentSignedAt?: string;
-  businessId: {
+  businessId?: {
     _id: string;
     name: string;
     email: string;
-  };
-  jobId: {
+  } | null;
+  jobId?: {
     _id: string;
     title: string;
     description: string;
-  };
+  } | null;
+  studentId?: {
+    _id: string;
+    name: string;
+    email: string;
+  } | null;
   createdAt: string;
   updatedAt: string;
 }
-interface Proposal {
-  _id: string;
-  jobId: {
-    _id: string;
-    title: string;
-    description: string;
-    budgetMin: number;
-    budgetMax: number;
-  };
-  status: string;
-  quoteAmount: number;
-  submittedAt: string;
-  contractId?: Contract;
-}
+
 export default function StudentDashboard() {
   const router = useRouter();
-  const { token, user } = useAuth();
+  const { user, token, isAuthenticated, loading: authLoading } = useAuth();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [chats, setChats] = useState<ChatConversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  
+
   // UI State
   const [activeTab, setActiveTab] = useState("explore");
   const [searchTerm, setSearchTerm] = useState("");
@@ -125,19 +146,35 @@ export default function StudentDashboard() {
   const [applicationsCurrentPage, setApplicationsCurrentPage] = useState(1);
   const [selectedChat, setSelectedChat] = useState<ChatConversation | null>(null);
   const [newMessage, setNewMessage] = useState("");
-  
+
   // Filter states
   const [skillFilter, setSkillFilter] = useState<string>("all");
   const [budgetFilter, setBudgetFilter] = useState<string>("all");
-  
-  const jobsPerPage = 5;
-  const applicationsPerPage = 5;
+
+  // Contract and signature states
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [showSignatureModal, setShowSignatureModal] = useState(false);
   const [currentContract, setCurrentContract] = useState<Contract | null>(null);
   const [isSavingSignature, setIsSavingSignature] = useState(false);
-  
   const { toast } = useToast();
+
+  const jobsPerPage = 5;
+  const applicationsPerPage = 5;
+
+  // Check authentication and redirect if needed
+  useEffect(() => {
+    if (!authLoading) {
+      if (!isAuthenticated || !user) {
+        router.push('/auth/login');
+        return;
+      }
+      if (user.role !== 'student') {
+        router.push('/unauthorized');
+        return;
+      }
+    }
+  }, [isAuthenticated, authLoading, user, router]);
+
   // Fetch jobs
   useEffect(() => {
     const fetchJobs = async () => {
@@ -145,7 +182,7 @@ export default function StudentDashboard() {
         const response = await fetch("/api/jobs");
         const data = await response.json();
         if (response.ok) {
-          setJobs(data.jobs);
+          setJobs(data.jobs || []);
         } else {
           setError(data.error || "Failed to fetch jobs");
         }
@@ -157,6 +194,7 @@ export default function StudentDashboard() {
     };
     fetchJobs();
   }, []);
+
   // Fetch proposals
   useEffect(() => {
     const fetchProposals = async () => {
@@ -164,12 +202,12 @@ export default function StudentDashboard() {
       try {
         const response = await fetch("/api/proposals", {
           headers: {
-            Authorization: `Bearer ${token}`,
+            'Authorization': `Bearer ${token}`,
           },
         });
         const data = await response.json();
         if (response.ok) {
-          setProposals(data.proposals);
+          setProposals(data.proposals || []);
           console.log("Fetched proposals:", data.proposals);
         }
       } catch (err) {
@@ -178,6 +216,7 @@ export default function StudentDashboard() {
     };
     fetchProposals();
   }, [token]);
+
   // Fetch chats
   useEffect(() => {
     const fetchChats = async () => {
@@ -185,12 +224,12 @@ export default function StudentDashboard() {
       try {
         const response = await fetch("/api/chats", {
           headers: {
-            Authorization: `Bearer ${token}`,
+            'Authorization': `Bearer ${token}`,
           },
         });
         const data = await response.json();
         if (response.ok) {
-          setChats(data.chats);
+          setChats(data.chats || []);
         }
       } catch (err) {
         console.error("Failed to fetch chats:", err);
@@ -198,83 +237,157 @@ export default function StudentDashboard() {
     };
     fetchChats();
   }, [token]);
+
+  // Fetch all data (proposals and contracts)
+  const fetchData = async () => {
+    if (!token || !user) return;
+    try {
+      setLoading(true);
+
+      // Fetch proposals
+      const proposalsResponse = await fetch('/api/proposals', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (proposalsResponse.ok) {
+        const proposalsData = await proposalsResponse.json();
+        setProposals(proposalsData.proposals || []);
+      }
+
+      // Fetch contracts where student is involved
+      const contractsResponse = await fetch('/api/contracts', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (contractsResponse.ok) {
+        const contractsData = await contractsResponse.json();
+        // Filter contracts where current user is the student
+        const studentContracts = contractsData.contracts?.filter(
+          (contract: Contract) => {
+            // Check if the student ID matches either in studentId field or other identifier
+            return contract.studentId?._id === user?.id;
+          }
+        ) || [];
+        setContracts(studentContracts);
+      }
+    } catch (error) {
+      console.error('Failed to fetch data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (token && user) {
+      fetchData();
+    }
+  }, [token, user]);
+
   // Filter and search jobs
   const filteredJobs = jobs.filter((job) => {
     // Filter by search term
     const matchesSearch =
       searchTerm === "" ||
-      job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      job.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      job.skillsRequired.some((skill) =>
+      (job.title && job.title.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (job.description && job.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (job.skills && job.skills.some((skill) =>
         skill.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    
+      ));
+
     // Filter by skill
     const matchesSkill =
-      skillFilter === "all" || job.skillsRequired.includes(skillFilter);
-    
+      skillFilter === "all" || (job.skills && job.skills.includes(skillFilter));
+
     // Filter by budget
     let matchesBudget = true;
     if (budgetFilter !== "all") {
       const [min, max] = budgetFilter.split("-").map(Number);
-      const avgBudget = (job.budgetMin + job.budgetMax) / 2;
+      const avgBudget = ((job.budgetMin || 0) + (job.budgetMax || 0)) / 2;
       matchesBudget = avgBudget >= min && avgBudget <= max;
     }
-    
+
     return matchesSearch && matchesSkill && matchesBudget;
   });
+
   // Pagination logic for jobs
   const totalJobsPages = Math.ceil(filteredJobs.length / jobsPerPage);
   const jobsStartIndex = (jobsCurrentPage - 1) * jobsPerPage;
   const jobsEndIndex = jobsStartIndex + jobsPerPage;
   const currentJobs = filteredJobs.slice(jobsStartIndex, jobsEndIndex);
+
   // Pagination logic for applications
   const totalApplicationsPages = Math.ceil(proposals.length / applicationsPerPage);
   const applicationsStartIndex = (applicationsCurrentPage - 1) * applicationsPerPage;
   const applicationsEndIndex = applicationsStartIndex + applicationsPerPage;
   const currentApplications = proposals.slice(applicationsStartIndex, applicationsEndIndex);
+
   // Get unique skills from all jobs
   const getAllSkills = () => {
     const skills = new Set<string>();
     jobs.forEach((job) => {
-      job.skillsRequired.forEach((skill) => skills.add(skill));
+      if (job.skills) {
+        job.skills.forEach((skill) => skills.add(skill));
+      }
     });
     return Array.from(skills).sort();
   };
+
   // Get job details for proposals
-  // const getJobDetails = (jobId: string) => {
-  //   return jobs.find((job) => job._id === jobId);
-  // };
   const getJobDetails = (jobId: string) => {
-  if (!jobId) return null;
-  return jobs.find((job) => job._id === jobId);
-};
+    if (!jobId) return null;
+    return jobs.find((job) => job._id === jobId);
+  };
+
   // Create a set of job IDs that the student has already applied to
-  // const appliedJobIds = useMemo(() => 
-  //   new Set(proposals.map((p) => p.jobId)), 
-  //   [proposals]
-  // );
-  const appliedJobIds = useMemo(() => 
-  new Set(proposals.filter(p => p.jobId).map((p) => p.jobId)), 
-  [proposals]
-);
+  const appliedJobIds = useMemo(() =>
+    new Set(proposals.filter(p => p.jobId).map((p) => {
+      if (typeof p.jobId === 'string') {
+        return p.jobId;
+      } else if (p.jobId && typeof p.jobId === 'object' && p.jobId._id) {
+        return p.jobId._id;
+      }
+      return null;
+    }).filter(Boolean)),
+    [proposals]
+  );
+
   // Get the status of a proposal for a specific job
   const getProposalStatus = (jobId: string) => {
-  if (!jobId) return null;
-  const proposal = proposals.find((p) => p.jobId === jobId);
-  return proposal ? proposal.status : null;
-};
+    if (!jobId) return null;
+    const proposal = proposals.find((p) => {
+      if (typeof p.jobId === 'string') {
+        return p.jobId === jobId;
+      } else if (p.jobId && typeof p.jobId === 'object' && p.jobId._id) {
+        return p.jobId._id === jobId;
+      }
+      return false;
+    });
+    return proposal ? proposal.status : null;
+  };
+
   // Handle job application
   const handleApplyToJob = (job: Job) => {
     router.push(`/dashboard/student/jobs/${job._id}?action=submit`);
   };
+
   // Handle viewing contract
   const handleViewContract = (jobId: string) => {
-    const proposal = proposals.find(p => p.jobId === jobId);
+    const proposal = proposals.find(p => {
+      if (!p.jobId) return false;
+      if (typeof p.jobId === 'string') {
+        return p.jobId === jobId;
+      } else if (p.jobId && p.jobId._id) {
+        return p.jobId._id === jobId;
+      }
+      return false;
+    });
     if (proposal) {
       router.push(`/dashboard/student/proposals/${proposal._id}`);
     }
   };
+
   // Submit application
   const handleSubmitApplication = async () => {
     if (!selectedJob || !token) return;
@@ -283,7 +396,7 @@ export default function StudentDashboard() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           jobId: selectedJob._id,
@@ -292,16 +405,17 @@ export default function StudentDashboard() {
           availability: applicationForm.availability,
         }),
       });
+
       if (response.ok) {
         // Refresh proposals
         const proposalsResponse = await fetch("/api/proposals", {
           headers: {
-            Authorization: `Bearer ${token}`,
+            'Authorization': `Bearer ${token}`,
           },
         });
         const proposalsData = await proposalsResponse.json();
         if (proposalsResponse.ok) {
-          setProposals(proposalsData.proposals);
+          setProposals(proposalsData.proposals || []);
         }
         setSelectedJob(null);
         setApplicationForm({
@@ -317,6 +431,7 @@ export default function StudentDashboard() {
       setError("An error occurred. Please try again.");
     }
   };
+
   // Send message
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !selectedChat || !token) return;
@@ -325,18 +440,19 @@ export default function StudentDashboard() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           content: newMessage,
         }),
       });
+
       if (response.ok) {
         // Update the selectedChat with the new message
         const updatedMessages = [
           ...selectedChat.messages,
           {
-            id: selectedChat.messages.length + 1,
+            id: (selectedChat.messages.length + 1).toString(),
             sender: "student",
             content: newMessage,
             timestamp: new Date().toISOString(),
@@ -353,10 +469,10 @@ export default function StudentDashboard() {
           chats.map((chat) =>
             chat.id === selectedChat.id
               ? {
-                  ...chat,
-                  lastMessage: newMessage,
-                  timestamp: new Date().toISOString(),
-                }
+                ...chat,
+                lastMessage: newMessage,
+                timestamp: new Date().toISOString(),
+              }
               : chat
           )
         );
@@ -369,6 +485,7 @@ export default function StudentDashboard() {
       setError("An error occurred. Please try again.");
     }
   };
+
   // Status badge component
   const getStatusBadge = (status: string) => {
     const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -378,72 +495,26 @@ export default function StudentDashboard() {
       'signed': 'outline',
       'completed': 'default'
     };
-    
     return <Badge variant={variants[status] || 'secondary'}>{status}</Badge>;
   };
-  
+
   const getPaymentStatusBadge = (paymentStatus: string) => {
     const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-        'pending': 'secondary',
-        'partial': 'destructive',
-        'completed': 'default'
+      'pending': 'secondary',
+      'partial': 'destructive',
+      'completed': 'default'
     };
-    
     return <Badge variant={variants[paymentStatus] || 'secondary'}>
-        Payment: {paymentStatus}
+      Payment: {paymentStatus}
     </Badge>;
   };
-  
+
   const allSkills = getAllSkills();
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      
-      // Fetch proposals
-      const proposalsResponse = await fetch('/api/proposals', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      
-      if (proposalsResponse.ok) {
-        const proposalsData = await proposalsResponse.json();
-        setProposals(proposalsData.proposals || []);
-      }
-      
-      // Fetch contracts where student is involved
-      const contractsResponse = await fetch('/api/contracts', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      
-      if (contractsResponse.ok) {
-        const contractsData = await contractsResponse.json();
-        // Filter contracts where current user is the student
-        const studentContracts = contractsData.contracts?.filter(
-          (contract: Contract) => contract.studentId._id === user?.id
-        ) || [];
-        setContracts(studentContracts);
-      }
-      
-    } catch (error) {
-      console.error('Failed to fetch data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-  useEffect(() => {
-    if (token && user) {
-      fetchData();
-    }
-  }, [token, user]);
+
   const handleSignatureSave = async (signature: string) => {
     if (!currentContract) return;
-    
     try {
       setIsSavingSignature(true);
-      
       const response = await fetch(`/api/contracts/${currentContract._id}/sign`, {
         method: 'POST',
         headers: {
@@ -455,13 +526,12 @@ export default function StudentDashboard() {
           signatureType: 'student',
         }),
       });
-      
+
       if (response.ok) {
         toast({
           title: 'Signature saved successfully!',
           description: 'Your signature has been saved. Contract is now fully signed!',
         });
-        
         setShowSignatureModal(false);
         setCurrentContract(null);
         fetchData(); // Refresh data
@@ -484,7 +554,19 @@ export default function StudentDashboard() {
       setIsSavingSignature(false);
     }
   };
-  
+
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-gray-900"></div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated || !user) {
+    return null;
+  }
+
   if (loading) {
     return (
       <div className="text-center py-8">
@@ -493,6 +575,7 @@ export default function StudentDashboard() {
       </div>
     );
   }
+
   if (error) {
     return (
       <div className="text-center py-10">
@@ -508,6 +591,7 @@ export default function StudentDashboard() {
       </div>
     );
   }
+
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="p-6">
@@ -516,7 +600,7 @@ export default function StudentDashboard() {
           onValueChange={setActiveTab}
           className="space-y-6"
         >
-          <TabsList className="grid w-full grid-cols-3 bg-white border border-slate-200">
+          <TabsList className="grid w-full grid-cols-4 bg-white border border-slate-200">
             <TabsTrigger
               value="explore"
               className="flex items-center space-x-2"
@@ -535,8 +619,12 @@ export default function StudentDashboard() {
               <MessageCircle className="w-4 h-4" />
               <span>Messages</span>
             </TabsTrigger>
+            <TabsTrigger value="profile" className="flex items-center space-x-2">
+              <User className="w-4 h-4" />
+              <span>Profile</span>
+            </TabsTrigger>
           </TabsList>
-          
+
           {/* Explore Jobs Tab */}
           <TabsContent value="explore" className="space-y-6">
             <div className="flex items-center space-x-4">
@@ -550,7 +638,7 @@ export default function StudentDashboard() {
                 />
               </div>
             </div>
-            
+
             {/* Filters */}
             <div className="bg-white rounded-lg shadow-sm border p-4 mb-6">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -606,7 +694,7 @@ export default function StudentDashboard() {
                 </div>
               </div>
             </div>
-            
+
             {/* Results Summary */}
             <div className="mb-6">
               <p className="text-gray-600">
@@ -614,7 +702,7 @@ export default function StudentDashboard() {
                 {searchTerm && ` matching "${searchTerm}"`}
               </p>
             </div>
-            
+
             <div className="grid gap-6">
               {currentJobs.map((job) => {
                 const hasApplied = appliedJobIds.has(job._id);
@@ -630,10 +718,10 @@ export default function StudentDashboard() {
                           <Avatar className="w-12 h-12">
                             <AvatarImage
                               src={job.companyLogo || "/placeholder.svg"}
-                              alt={job.company}
+                              alt={job.company || "Company"}
                             />
                             <AvatarFallback>
-                              {job.company?.charAt(0) || "C"}
+                              {(job.company || "Company").charAt(0)}
                             </AvatarFallback>
                           </Avatar>
                           <div>
@@ -651,13 +739,13 @@ export default function StudentDashboard() {
                               <div className="flex items-center space-x-1">
                                 <DollarSign className="w-4 h-4" />
                                 <span>
-                                  ${job.budgetMin.toLocaleString()} - $
-                                  {job.budgetMax.toLocaleString()}
+                                  ${(job.budgetMin || 0).toLocaleString()} - $
+                                  {(job.budgetMax || 0).toLocaleString()}
                                 </span>
                               </div>
                               <div className="flex items-center space-x-1">
                                 <Clock className="w-4 h-4" />
-                                <span>{job.duration}</span>
+                                <span>{job.duration || "Not specified"}</span>
                               </div>
                             </div>
                           </div>
@@ -669,8 +757,8 @@ export default function StudentDashboard() {
                                 proposalStatus === "accepted"
                                   ? "default"
                                   : proposalStatus === "rejected"
-                                  ? "destructive"
-                                  : "secondary"
+                                    ? "destructive"
+                                    : "secondary"
                               }
                               className={
                                 proposalStatus === "accepted"
@@ -681,8 +769,8 @@ export default function StudentDashboard() {
                               {proposalStatus === "accepted"
                                 ? "Accepted"
                                 : proposalStatus === "rejected"
-                                ? "Rejected"
-                                : "Pending"}
+                                  ? "Rejected"
+                                  : "Pending"}
                             </Badge>
                           )}
                           <Dialog>
@@ -705,7 +793,7 @@ export default function StudentDashboard() {
                                     Job Description
                                   </h4>
                                   <p className="text-slate-600">
-                                    {job.description}
+                                    {job.description || "No description provided"}
                                   </p>
                                 </div>
                                 <div>
@@ -713,7 +801,7 @@ export default function StudentDashboard() {
                                     Skills Required
                                   </h4>
                                   <div className="flex flex-wrap gap-2">
-                                    {job.skillsRequired.map((skill, index) => (
+                                    {(job.skills || []).map((skill, index) => (
                                       <Badge key={index} variant="secondary">
                                         {skill}
                                       </Badge>
@@ -761,16 +849,16 @@ export default function StudentDashboard() {
                       </div>
                     </CardHeader>
                     <CardContent>
-                      <p className="text-slate-600 mb-4">{job.description}</p>
+                      <p className="text-slate-600 mb-4">{job.description || "No description provided"}</p>
                       <div className="flex flex-wrap gap-2">
-                        {job.skillsRequired.slice(0, 4).map((skill, index) => (
+                        {(job.skills || []).slice(0, 4).map((skill, index) => (
                           <Badge key={index} variant="secondary">
                             {skill}
                           </Badge>
                         ))}
-                        {job.skillsRequired.length > 4 && (
+                        {(job.skills || []).length > 4 && (
                           <Badge variant="secondary">
-                            +{job.skillsRequired.length - 4} more
+                            +{(job.skills || []).length - 4} more
                           </Badge>
                         )}
                       </div>
@@ -779,7 +867,7 @@ export default function StudentDashboard() {
                 );
               })}
             </div>
-            
+
             {/* Jobs Pagination */}
             {totalJobsPages > 1 && (
               <div className="flex items-center justify-center space-x-2">
@@ -819,7 +907,7 @@ export default function StudentDashboard() {
               </div>
             )}
           </TabsContent>
-          
+
           {/* My Applications Tab */}
           <TabsContent value="applications" className="space-y-6">
             <div className="flex justify-between items-center mb-6">
@@ -831,11 +919,11 @@ export default function StudentDashboard() {
               </div>
               <Link href="/dashboard/student/proposals">
                 <Button variant="outline">
-                  View All Proposals 
+                  View All Proposals
                 </Button>
               </Link>
             </div>
-            
+
             {/* Status Summary */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
               <Card>
@@ -879,7 +967,7 @@ export default function StudentDashboard() {
                 </CardContent>
               </Card>
             </div>
-            
+
             {/* Proposals List */}
             {currentApplications.length === 0 ? (
               <div className="text-center py-16">
@@ -900,10 +988,7 @@ export default function StudentDashboard() {
                   const job = getJobDetails(application.jobId);
                   if (!job) return null;
                   return (
-                    <Card
-                      key={application._id}
-                      className="hover:shadow-md transition-shadow"
-                    >
+                    <Card key={application._id} className="hover:shadow-md transition-shadow">
                       <CardHeader>
                         <div className="flex justify-between items-start">
                           <div className="flex-1">
@@ -916,10 +1001,7 @@ export default function StudentDashboard() {
                               </Link>
                             </CardTitle>
                             <CardDescription>
-                              {job.company} • Submitted on{" "}
-                              {new Date(
-                                application.createdAt
-                              ).toLocaleDateString()}
+                              {job.company} • Submitted on {new Date(application.createdAt).toLocaleDateString()}
                             </CardDescription>
                           </div>
                           <div className="flex flex-col items-end gap-2">
@@ -933,13 +1015,10 @@ export default function StudentDashboard() {
                         </p>
                         <div className="flex justify-between items-center">
                           <span className="font-medium text-lg">
-                            ${job.budgetMin.toLocaleString()} - $
-                            {job.budgetMax.toLocaleString()}
+                            ${job.budgetMin.toLocaleString()} - ${job.budgetMax.toLocaleString()}
                           </span>
                           <div className="flex gap-2">
-                            <Link
-                              href={`/dashboard/student/proposals/${application._id}`}
-                            >
+                            <Link href={`/dashboard/student/proposals/${application._id}`}>
                               <Button variant="outline" size="sm">
                                 View Details
                               </Button>
@@ -951,9 +1030,7 @@ export default function StudentDashboard() {
                                 </Button>
                               </Link>
                             )}
-                            <Link
-                              href={`/dashboard/student/jobs/${application.jobId}`}
-                            >
+                            <Link href={`/dashboard/student/jobs/${application.jobId}`}>
                               <Button variant="outline" size="sm">
                                 View Job
                               </Button>
@@ -965,55 +1042,58 @@ export default function StudentDashboard() {
                   );
                 })}
               </div>
-            )}
-            
+            )
+            }
+
             {/* Applications Pagination */}
-            {totalApplicationsPages > 1 && (
-              <div className="flex items-center justify-center space-x-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setApplicationsCurrentPage(applicationsCurrentPage - 1)
-                  }
-                  disabled={applicationsCurrentPage === 1}
-                >
-                  Previous
-                </Button>
-                <div className="flex items-center space-x-1">
-                  {Array.from(
-                    { length: totalApplicationsPages },
-                    (_, i) => i + 1
-                  ).map((page) => (
-                    <Button
-                      key={page}
-                      variant={
-                        page === applicationsCurrentPage ? "default" : "outline"
-                      }
-                      size="sm"
-                      onClick={() => setApplicationsCurrentPage(page)}
-                      className="w-8 h-8 p-0"
-                    >
-                      {page}
-                    </Button>
-                  ))}
+            {
+              totalApplicationsPages > 1 && (
+                <div className="flex items-center justify-center space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setApplicationsCurrentPage(applicationsCurrentPage - 1)
+                    }
+                    disabled={applicationsCurrentPage === 1}
+                  >
+                    Previous
+                  </Button>
+                  <div className="flex items-center space-x-1">
+                    {Array.from(
+                      { length: totalApplicationsPages },
+                      (_, i) => i + 1
+                    ).map((page) => (
+                      <Button
+                        key={page}
+                        variant={
+                          page === applicationsCurrentPage ? "default" : "outline"
+                        }
+                        size="sm"
+                        onClick={() => setApplicationsCurrentPage(page)}
+                        className="w-8 h-8 p-0"
+                      >
+                        {page}
+                      </Button>
+                    ))}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setApplicationsCurrentPage(applicationsCurrentPage + 1)
+                    }
+                    disabled={applicationsCurrentPage === totalApplicationsPages}
+                  >
+                    Next
+                  </Button>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setApplicationsCurrentPage(applicationsCurrentPage + 1)
-                  }
-                  disabled={applicationsCurrentPage === totalApplicationsPages}
-                >
-                  Next
-                </Button>
-              </div>
-            )}
-          </TabsContent>
-          
+              )
+            }
+          </TabsContent >
+
           {/* Messages Tab */}
-          <TabsContent value="chat" className="space-y-6">
+          < TabsContent value="chat" className="space-y-6" >
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[600px]">
               {/* Chat List */}
               <Card className="lg:col-span-1">
@@ -1028,11 +1108,10 @@ export default function StudentDashboard() {
                     {chats.map((conversation) => (
                       <div
                         key={conversation.id}
-                        className={`p-4 border-b cursor-pointer hover:bg-slate-50 ${
-                          selectedChat?.id === conversation.id
-                            ? "bg-indigo-50 border-indigo-200"
-                            : ""
-                        }`}
+                        className={`p-4 border-b cursor-pointer hover:bg-slate-50 ${selectedChat?.id === conversation.id
+                          ? "bg-indigo-50 border-indigo-200"
+                          : ""
+                          }`}
                         onClick={() => setSelectedChat(conversation)}
                       >
                         <div className="flex items-center justify-between mb-2">
@@ -1061,7 +1140,7 @@ export default function StudentDashboard() {
                   </ScrollArea>
                 </CardContent>
               </Card>
-              
+
               {/* Chat Window */}
               <Card className="lg:col-span-2">
                 {selectedChat ? (
@@ -1078,26 +1157,23 @@ export default function StudentDashboard() {
                           {selectedChat.messages.map((message) => (
                             <div
                               key={message.id}
-                              className={`flex ${
-                                message.sender === "student"
-                                  ? "justify-end"
-                                  : "justify-start"
-                              }`}
+                              className={`flex ${message.sender === "student"
+                                ? "justify-end"
+                                : "justify-start"
+                                }`}
                             >
                               <div
-                                className={`max-w-[70%] p-3 rounded-lg ${
-                                  message.sender === "student"
-                                    ? "bg-indigo-600 text-white"
-                                    : "bg-slate-100 text-slate-900"
-                                }`}
+                                className={`max-w-[70%] p-3 rounded-lg ${message.sender === "student"
+                                  ? "bg-indigo-600 text-white"
+                                  : "bg-slate-100 text-slate-900"
+                                  }`}
                               >
                                 <p className="text-sm">{message.content}</p>
                                 <p
-                                  className={`text-xs mt-1 ${
-                                    message.sender === "student"
-                                      ? "text-indigo-200"
-                                      : "text-slate-500"
-                                  }`}
+                                  className={`text-xs mt-1 ${message.sender === "student"
+                                    ? "text-indigo-200"
+                                    : "text-slate-500"
+                                    }`}
                                 >
                                   {new Date(
                                     message.timestamp
@@ -1138,79 +1214,81 @@ export default function StudentDashboard() {
                 )}
               </Card>
             </div>
-          </TabsContent>
-        </Tabs>
-      </div>
-      
+          </TabsContent >
+        </Tabs >
+      </div >
+
       {/* Application Form Dialog */}
-      {selectedJob && (
-        <Dialog open={!!selectedJob} onOpenChange={() => setSelectedJob(null)}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Apply to {selectedJob.title}</DialogTitle>
-              <DialogDescription>
-                {selectedJob.company} • {selectedJob.location}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="coverLetter">Cover Letter *</Label>
-                <Textarea
-                  id="coverLetter"
-                  placeholder="Tell us why you're interested in this position and what makes you a great fit..."
-                  value={applicationForm.coverLetter}
-                  onChange={(e) =>
-                    setApplicationForm({
-                      ...applicationForm,
-                      coverLetter: e.target.value,
-                    })
-                  }
-                  className="min-h-[120px]"
-                />
+      {
+        selectedJob && (
+          <Dialog open={!!selectedJob} onOpenChange={() => setSelectedJob(null)}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Apply to {selectedJob.title}</DialogTitle>
+                <DialogDescription>
+                  {selectedJob.company} • {selectedJob.location}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="coverLetter">Cover Letter *</Label>
+                  <Textarea
+                    id="coverLetter"
+                    placeholder="Tell us why you're interested in this position and what makes you a great fit..."
+                    value={applicationForm.coverLetter}
+                    onChange={(e) =>
+                      setApplicationForm({
+                        ...applicationForm,
+                        coverLetter: e.target.value,
+                      })
+                    }
+                    className="min-h-[120px]"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="portfolio">Portfolio/Resume Link</Label>
+                  <Input
+                    id="portfolio"
+                    placeholder="https://your-portfolio.com or link to resume"
+                    value={applicationForm.portfolio}
+                    onChange={(e) =>
+                      setApplicationForm({
+                        ...applicationForm,
+                        portfolio: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="availability">Availability</Label>
+                  <Input
+                    id="availability"
+                    placeholder="When can you start? (e.g., Immediately, After finals, etc.)"
+                    value={applicationForm.availability}
+                    onChange={(e) =>
+                      setApplicationForm({
+                        ...applicationForm,
+                        availability: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+                <div className="flex justify-end space-x-2">
+                  <Button variant="outline" onClick={() => setSelectedJob(null)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleSubmitApplication}
+                    disabled={!applicationForm.coverLetter.trim()}
+                  >
+                    Submit Application
+                  </Button>
+                </div>
               </div>
-              <div>
-                <Label htmlFor="portfolio">Portfolio/Resume Link</Label>
-                <Input
-                  id="portfolio"
-                  placeholder="https://your-portfolio.com or link to resume"
-                  value={applicationForm.portfolio}
-                  onChange={(e) =>
-                    setApplicationForm({
-                      ...applicationForm,
-                      portfolio: e.target.value,
-                    })
-                  }
-                />
-              </div>
-              <div>
-                <Label htmlFor="availability">Availability</Label>
-                <Input
-                  id="availability"
-                  placeholder="When can you start? (e.g., Immediately, After finals, etc.)"
-                  value={applicationForm.availability}
-                  onChange={(e) =>
-                    setApplicationForm({
-                      ...applicationForm,
-                      availability: e.target.value,
-                    })
-                  }
-                />
-              </div>
-              <div className="flex justify-end space-x-2">
-                <Button variant="outline" onClick={() => setSelectedJob(null)}>
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleSubmitApplication}
-                  disabled={!applicationForm.coverLetter.trim()}
-                >
-                  Submit Application
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
+            </DialogContent>
+          </Dialog>
+        )
+      }
       {/* Active Contracts Section */}
       <Card>
         <CardHeader>
@@ -1252,12 +1330,12 @@ export default function StudentDashboard() {
                         </div>
                       </div>
                     </div>
-                    
+
                     <div className="flex items-center gap-2 mb-3">
                       {getStatusBadge(contract.status)}
                       {getPaymentStatusBadge(contract.paymentStatus)}
                     </div>
-                    
+
                     {/* Signature Status */}
                     <div className="flex items-center gap-4 mb-3">
                       <div className="flex items-center gap-2">
@@ -1270,7 +1348,7 @@ export default function StudentDashboard() {
                           <Badge variant="secondary">Pending</Badge>
                         )}
                       </div>
-                      
+
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium">Student:</span>
                         {contract.studentSignature ? (
@@ -1282,7 +1360,7 @@ export default function StudentDashboard() {
                         )}
                       </div>
                     </div>
-                    
+
                     {/* Action Buttons */}
                     <div className="flex gap-2">
                       {contract.paymentStatus === 'completed' && !contract.studentSignature && (
@@ -1296,13 +1374,13 @@ export default function StudentDashboard() {
                           Sign Contract
                         </Button>
                       )}
-                      
+
                       {contract.status === 'signed' && (
                         <Badge variant="default" className="text-green-600">
                           Contract Fully Signed! 🎉
                         </Badge>
                       )}
-                      
+
                       {contract.status === 'changes_requested' && (
                         <Button variant="outline">
                           Review Changes
@@ -1342,17 +1420,19 @@ export default function StudentDashboard() {
                       <div>
                         <h3 className="font-semibold">{proposal.jobId?.title || 'Job Title Not Available'}</h3>
                         <p className="text-sm text-gray-600">
-  {proposal.jobId?.description ? `${proposal.jobId.description.substring(0, 100)}...` : 'Job description not available'}
-</p>
+                          {proposal.jobId && typeof proposal.jobId === 'object' && proposal.jobId.description
+                            ? `${proposal.jobId.description.substring(0, 100)}...`
+                            : 'Job description not available'}
+                        </p>
                         <div className="flex items-center gap-2 mt-2">
                           <Badge variant={
                             proposal.status === 'accepted' ? 'default' :
-                            proposal.status === 'rejected' ? 'destructive' :
-                            proposal.status === 'withdrawn' ? 'outline' : 'secondary'
+                              proposal.status === 'rejected' ? 'destructive' :
+                                proposal.status === 'withdrawn' ? 'outline' : 'secondary'
                           }>
                             {proposal.status}
                           </Badge>
-                          
+
                           {proposal.contractId && (
                             <Badge variant="outline">
                               Contract: {proposal.contractId.status}
@@ -1377,29 +1457,31 @@ export default function StudentDashboard() {
         </CardContent>
       </Card>
       {/* Signature Modal */}
-      {showSignatureModal && currentContract && (
-        <Dialog open={showSignatureModal} onOpenChange={setShowSignatureModal}>
-          <DialogContent className="max-w-4xl">
-            <DialogHeader>
-              <DialogTitle>E-Sign Contract</DialogTitle>
-              <DialogDescription>
-                Please provide your signature to complete the contract for {currentContract.title}
-              </DialogDescription>
-            </DialogHeader>
-            
-            <SignaturePad
-              title="Sign as Student"
-              description={`Please provide your signature to complete the contract for ${currentContract.title}`}
-              onSave={handleSignatureSave}
-              onCancel={() => {
-                setShowSignatureModal(false);
-                setCurrentContract(null);
-              }}
-              isLoading={isSavingSignature}
-            />
-          </DialogContent>
-        </Dialog>
-      )}
-    </div>
+      {
+        showSignatureModal && currentContract && (
+          <Dialog open={showSignatureModal} onOpenChange={setShowSignatureModal}>
+            <DialogContent className="max-w-4xl">
+              <DialogHeader>
+                <DialogTitle>E-Sign Contract</DialogTitle>
+                <DialogDescription>
+                  Please provide your signature to complete the contract for {currentContract.title}
+                </DialogDescription>
+              </DialogHeader>
+
+              <SignaturePad
+                title="Sign as Student"
+                description={`Please provide your signature to complete the contract for ${currentContract.title}`}
+                onSave={handleSignatureSave}
+                onCancel={() => {
+                  setShowSignatureModal(false);
+                  setCurrentContract(null);
+                }}
+                isLoading={isSavingSignature}
+              />
+            </DialogContent>
+          </Dialog>
+        )
+      }
+    </div >
   );
 }

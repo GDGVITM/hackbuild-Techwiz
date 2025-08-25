@@ -5,8 +5,9 @@ import { Button } from '@/components/ui/button';
 import ProposalForm from '@/components/student/ProposalForm';
 import { Job } from '@/types/job';
 import { useAuth } from '@/context/AuthContext';
+import ProtectedRoute from '@/components/auth/ProtectedRoute';
 
-export default function JobDetailsPage() {
+function JobDetailsPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const jobId = params.id as string;
@@ -16,7 +17,7 @@ export default function JobDetailsPage() {
   const [error, setError] = useState<string | null>(null);
   const [hasApplied, setHasApplied] = useState(false);
   const [proposalStatus, setProposalStatus] = useState<string | null>(null);
-  const { user, token } = useAuth();
+  const { user } = useAuth();
 
   useEffect(() => {
     const fetchJobAndProposalStatus = async () => {
@@ -25,7 +26,9 @@ export default function JobDetailsPage() {
         setError(null);
         
         // Fetch job details
-        const jobResponse = await fetch(`/api/jobs/${jobId}`);
+        const jobResponse = await fetch(`/api/jobs/${jobId}`, {
+          credentials: 'include'
+        });
         
         if (!jobResponse.ok) {
           const errorData = await jobResponse.json().catch(() => ({ error: 'Unknown error' }));
@@ -36,11 +39,9 @@ export default function JobDetailsPage() {
         setJob(jobData.job);
         
         // Check if student has already applied
-        if (user?.role === 'student' && token) {
+        if (user?.role === 'student') {
           const proposalsResponse = await fetch('/api/proposals', {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-            },
+            credentials: 'include'
           });
           
           if (proposalsResponse.ok) {
@@ -64,7 +65,7 @@ export default function JobDetailsPage() {
     };
 
     fetchJobAndProposalStatus();
-  }, [jobId, user, token]);
+  }, [jobId, user]);
 
   if (loading) return <div className="text-center py-10">Loading job details...</div>;
   if (error) return <div className="text-center py-10 text-red-600">{error}</div>;
@@ -92,6 +93,21 @@ export default function JobDetailsPage() {
               )}
             </div>
           </div>
+
+          {/* Always show the proposal form for testing */}
+      {user?.role === 'student' && (
+        <div id="proposal-form" className="bg-white rounded-lg shadow-md p-6">
+          <h2 className="text-xl font-semibold mb-4">Submit Your Proposal</h2>
+          <ProposalForm 
+            jobId={jobId}
+            jobMilestones={job.milestones} // Pass job milestones
+            onProposalSubmitted={() => {
+              setHasApplied(true);
+              setProposalStatus('pending');
+            }}
+          />
+        </div>
+      )}
           
           {user?.role === 'student' && !hasApplied && (
             <Button onClick={() => {
@@ -110,9 +126,9 @@ export default function JobDetailsPage() {
         <div className="mb-6">
           <h2 className="text-lg font-semibold mb-2">Skills Required</h2>
           <div className="flex flex-wrap gap-2">
-            {job.skillsRequired.map((skill, index) => (
+            {job.skills.map((skills, index) => (
               <span key={index} className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
-                {skill}
+                {skills}
               </span>
             ))}
           </div>
@@ -134,31 +150,27 @@ export default function JobDetailsPage() {
       {/* Always show the proposal form for testing */}
       {user?.role === 'student' && (
         <div id="proposal-form" className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-xl font-bold mb-4">Submit Proposal</h2>
-          
-          {hasApplied ? (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-blue-800">
-                You have already submitted a proposal for this job. 
-                Status: <span className="font-semibold">{proposalStatus}</span>
-              </p>
-              <div className="mt-4">
-                <a href="/dashboard/student/proposals" className="text-blue-600 hover:text-blue-800">
-                  View all your proposals
-                </a>
-              </div>
-            </div>
-          ) : (
-            <ProposalForm 
-              jobId={jobId} 
-              onProposalSubmitted={() => {
-                setHasApplied(true);
-                setProposalStatus('pending');
-              }} 
-            />
-          )}
+          <h2 className="text-xl font-semibold mb-4">Submit Your Proposal</h2>
+          <ProposalForm 
+            jobId={jobId}
+            jobMilestones={job.milestones}
+            budgetMin={job.budgetMin}
+            budgetMax={job.budgetMax}
+            onProposalSubmitted={() => {
+              setHasApplied(true);
+              setProposalStatus('pending');
+            }}
+          />
         </div>
       )}
     </div>
+  );
+}
+
+export default function JobDetailsPageWrapper() {
+  return (
+    <ProtectedRoute allowedRoles={['student']}>
+      <JobDetailsPage />
+    </ProtectedRoute>
   );
 }

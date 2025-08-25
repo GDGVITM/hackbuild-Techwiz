@@ -1,8 +1,10 @@
 // src/app/api/proposals/route.ts
 import { NextRequest, NextResponse } from 'next/server';
+import { getUserFromRequest, createUnauthorizedResponse, createForbiddenResponse } from '@/lib/utils/auth';
 import Proposal from '@/lib/models/Proposal';
 import Job from '@/lib/models/Job';
-import { verifyToken } from '@/lib/auth/jwt';
+import dbConnect from '@/lib/db/mongoose';
+import { verifyAuthToken } from '@/lib/utils/auth';
 
 interface MilestoneData {
   title: string;
@@ -23,12 +25,27 @@ interface QueryParams {
 
 export async function GET(request: NextRequest) {
   try {
-    const token = request.headers.get('Authorization')?.replace('Bearer ', '');
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    console.log('Proposals API - Starting request...');
+
+    let user = getUserFromRequest(request);
+    console.log('Proposals API - User from headers:', user);
+
+    if (!user) {
+      console.log('Proposals API - No user from headers, trying token verification...');
+      const payload = await verifyAuthToken(request);
+      if (payload) {
+        user = { userId: payload.userId, role: payload.role as 'student' | 'business' };
+        console.log('Proposals API - User from token:', user);
+      }
     }
 
-    const { userId, role } = verifyToken(token);
+    if (!user) {
+      console.log('Proposals API - No authentication found');
+      return createUnauthorizedResponse('Authentication required');
+    }
+
+    await dbConnect();
+
     const { searchParams } = new URL(request.url);
     const jobId = searchParams.get('jobId');
     const status = searchParams.get('status');
@@ -38,29 +55,38 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1');
 
     const query: QueryParams = {};
-    
+
     // If jobId is provided, get proposals for that job
     if (jobId) {
       // For business users, verify they own the job
-      if (role === 'business') {
+      if (user.role === 'business') {
         const job = await Job.findById(jobId);
-        if (!job || job.businessId.toString() !== userId) {
-          return NextResponse.json({ error: 'Unauthorized to view proposals for this job' }, { status: 403 });
+        if (!job || job.businessId.toString() !== user.userId) {
+          return createForbiddenResponse('Unauthorized to view proposals for this job');
+        }
+      }
+      // For students, verify they can only see proposals for jobs they can access
+      else if (user.role === 'student') {
+        // Students can only see proposals for open jobs
+        const job = await Job.findById(jobId);
+        if (!job || job.status !== 'open') {
+          return createForbiddenResponse('Job not accessible');
         }
       }
       query.jobId = jobId;
     } else {
       // If no jobId provided, get proposals based on user role
-      if (role === 'student') {
-        query.studentId = userId;
-      } else if (role === 'business') {
-        // Get all jobs owned by this business, then get proposals for those jobs
-        const businessJobs = await Job.find({ businessId: userId }).select('_id');
+      if (user.role === 'student') {
+        // Students can only see their own proposals
+        query.studentId = user.userId;
+      } else if (user.role === 'business') {
+        // Business users can see proposals for all their jobs
+        const businessJobs = await Job.find({ businessId: user.userId }).select('_id');
         const jobIds = businessJobs.map(job => job._id);
         query.jobId = { $in: jobIds };
       }
     }
-    
+
     // Filter by status if provided
     if (status && status !== 'all') {
       query.status = status;
@@ -73,6 +99,7 @@ export async function GET(request: NextRequest) {
     // Calculate skip for pagination
     const skip = (page - 1) * limit;
 
+    console.log('Proposals API - Fetching proposals with query:', query);
     const proposals = await Proposal.find(query)
       .populate('jobId', 'title description businessId budgetMin budgetMax')
       .populate('studentId', 'name email')
@@ -83,7 +110,8 @@ export async function GET(request: NextRequest) {
     // Get total count for pagination
     const total = await Proposal.countDocuments(query);
 
-    return NextResponse.json({ 
+    console.log('Proposals API - Returning proposals:', proposals.length);
+    return NextResponse.json({
       proposals,
       pagination: {
         page,
@@ -93,120 +121,128 @@ export async function GET(request: NextRequest) {
       }
     });
   } catch (error) {
-    console.error('Failed to fetch proposals:', error);
+    console.error('Proposals API - Failed to fetch proposals:', error);
     return NextResponse.json({ error: 'Failed to fetch proposals' }, { status: 500 });
   }
 }
 
+// POST new proposal (only students)
 export async function POST(request: NextRequest) {
   try {
-    const token = request.headers.get('Authorization')?.replace('Bearer ', '');
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    let user = getUserFromRequest(request);
+    if (!user) {
+      const payload = await verifyAuthToken(request);
+      if (payload) {
+        user = { userId: payload.userId, role: payload.role as 'student' | 'business' };
+      }
+    }
+    if (!user) {
+      return createUnauthorizedResponse('Authentication required');
     }
 
-    const { userId, role } = verifyToken(token);
-    
     // Only students can submit proposals
-    if (role !== 'student') {
-      return NextResponse.json({ error: 'Only students can submit proposals' }, { status: 403 });
+    if (user.role !== 'student') {
+      return createForbiddenResponse('Only students can submit proposals');
     }
 
-    const proposalData: ProposalData = await request.json();
+    const body: ProposalData = await request.json();
+    const { jobId, coverLetter, milestones = [], quoteAmount } = body;
 
-    // Check if student already submitted a proposal for this job
+    if (!jobId || !coverLetter || !quoteAmount) {
+      return NextResponse.json(
+        { error: 'Job ID, cover letter, and quote amount are required' },
+        { status: 400 }
+      );
+    }
+
+    // ✅ Validate milestones vs. quote amount
+    if (milestones.length > 0) {
+      // Sanitize milestone amounts
+      const sanitizedMilestones = milestones.map(m => ({
+        ...m,
+        amount: Number(m.amount)
+      }));
+
+      // Check each milestone
+      for (const milestone of sanitizedMilestones) {
+        if (!milestone.title || !milestone.dueDate || isNaN(milestone.amount) || milestone.amount <= 0) {
+          return NextResponse.json(
+            { error: 'Each milestone must have a title, positive numeric amount, and due date' },
+            { status: 400 }
+          );
+        }
+      }
+
+      const totalMilestoneAmount = sanitizedMilestones.reduce((sum, m) => sum + m.amount, 0);
+
+      if (isNaN(totalMilestoneAmount)) {
+        return NextResponse.json(
+          { error: 'Milestone amounts must be valid numbers' },
+          { status: 400 }
+        );
+      }
+
+      if (Math.abs(totalMilestoneAmount - Number(quoteAmount)) > 0.01) {
+        return NextResponse.json(
+          { 
+            error: `Total milestone amounts ($${totalMilestoneAmount.toFixed(2)}) must equal the quote amount ($${Number(quoteAmount).toFixed(2)})`
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    await dbConnect();
+
+    
+    
+
+    // Verify the job exists and is open
+    const job = await Job.findById(jobId);
+    if (!job) {
+      return NextResponse.json({ error: 'Job not found' }, { status: 404 });
+    }
+
+    if (job.status !== 'open') {
+      return NextResponse.json({ error: 'Job is not open for proposals' }, { status: 400 });
+    }
+
+    // NEW: Validate quote amount is within job's budget range
+    if (quoteAmount < job.budgetMin || quoteAmount > job.budgetMax) {
+      return NextResponse.json(
+        { error: `Quote amount must be between $${job.budgetMin} and $${job.budgetMax}` },
+        { status: 400 }
+      );
+    }
+
+    // Check if student already has a proposal for this job
     const existingProposal = await Proposal.findOne({
-      jobId: proposalData.jobId,
-      studentId: userId
+      jobId,
+      studentId: user.userId
     });
 
     if (existingProposal) {
-      return NextResponse.json({ error: 'You have already submitted a proposal for this job' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'You have already submitted a proposal for this job' },
+        { status: 400 }
+      );
     }
 
-    // Validate milestone amounts match quote amount
-    const totalMilestoneAmount = proposalData.milestones.reduce((sum: number, m: MilestoneData) => sum + m.amount, 0);
-    if (Math.abs(totalMilestoneAmount - proposalData.quoteAmount) > 0.01) {
-      return NextResponse.json({ 
-        error: 'Total milestone amounts must equal the quote amount',
-        details: {
-          totalMilestoneAmount,
-          quoteAmount: proposalData.quoteAmount,
-          difference: Math.abs(totalMilestoneAmount - proposalData.quoteAmount)
-        }
-      }, { status: 400 });
-    }
-
-    // Validate quote amount is within job budget range
-    const job = await Job.findById(proposalData.jobId);
-    if (job) {
-      if (proposalData.quoteAmount < job.budgetMin) {
-        return NextResponse.json({ 
-          error: `Quote amount ($${proposalData.quoteAmount}) is below the job's minimum budget ($${job.budgetMin})`,
-          details: {
-            quoteAmount: proposalData.quoteAmount,
-            budgetMin: job.budgetMin,
-            budgetMax: job.budgetMax
-          }
-        }, { status: 400 });
-      }
-      
-      if (proposalData.quoteAmount > job.budgetMax) {
-        return NextResponse.json({ 
-          error: `Quote amount ($${proposalData.quoteAmount}) exceeds the job's maximum budget ($${job.budgetMax})`,
-          details: {
-            quoteAmount: proposalData.quoteAmount,
-            budgetMin: job.budgetMin,
-            budgetMax: job.budgetMax
-          }
-        }, { status: 400 });
-      }
-    }
-
-    // Validate milestone due dates are in the future
-    const currentDate = new Date();
-    const invalidMilestones = proposalData.milestones.filter((m: MilestoneData) => {
-      const dueDate = new Date(m.dueDate);
-      return dueDate <= currentDate;
+    const proposal = new Proposal({
+      jobId,
+      studentId: user.userId,
+      coverLetter,
+      milestones,
+      quoteAmount,
+      status: 'pending'
     });
 
-    if (invalidMilestones.length > 0) {
-      return NextResponse.json({ 
-        error: 'Milestone due dates must be in the future',
-        details: {
-          invalidMilestones: invalidMilestones.map((m: MilestoneData) => ({
-            title: m.title,
-            dueDate: m.dueDate
-          }))
-        }
-      }, { status: 400 });
-    }
+    await proposal.save();
 
-    const newProposal = new Proposal({
-      ...proposalData,
-      studentId: userId,
-      milestones: proposalData.milestones.map((m: MilestoneData) => ({
-        ...m,
-        dueDate: new Date(m.dueDate),
-        status: 'pending'
-      })),
-      statusHistory: [{
-        status: 'pending',
-        changedAt: new Date(),
-        reason: 'Proposal submitted'
-      }]
-    });
-
-    await newProposal.save();
-    
-    // Populate the saved proposal for response
-    const populatedProposal = await Proposal.findById(newProposal._id)
-      .populate('jobId', 'title description businessId')
-      .populate('studentId', 'name email');
-
-    return NextResponse.json({ proposal: populatedProposal }, { status: 201 });
+    return NextResponse.json({ success: true, proposal }, { status: 201 });
   } catch (error) {
     console.error('Failed to create proposal:', error);
     return NextResponse.json({ error: 'Failed to create proposal' }, { status: 500 });
   }
 }
+

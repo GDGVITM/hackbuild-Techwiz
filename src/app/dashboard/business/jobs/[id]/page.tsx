@@ -7,9 +7,11 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Calendar, DollarSign, Clock, Users, ArrowLeft, Edit, Eye } from 'lucide-react';
 import { Job } from '@/types/job';
+// import ProposalList from '@/components/business/ProposalList';
+import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import ProposalList from '@/components/dashboard/ProposalList';
 
-export default function BusinessJobDetailsPage() {
+function BusinessJobDetailsPage() {
   const params = useParams();
   const router = useRouter();
   const jobId = params.id as string;
@@ -22,14 +24,16 @@ export default function BusinessJobDetailsPage() {
       try {
         setLoading(true);
         setError(null);
-        
-        const response = await fetch(`/api/jobs/${jobId}`);
-        
+
+        const response = await fetch(`/api/jobs/${jobId}`, {
+          credentials: 'include'
+        });
+
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
           throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
         }
-        
+
         const data = await response.json();
         setJob(data.job);
       } catch (error) {
@@ -66,7 +70,7 @@ export default function BusinessJobDetailsPage() {
       </div>
     );
   }
-  
+
   if (error) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -81,7 +85,7 @@ export default function BusinessJobDetailsPage() {
       </div>
     );
   }
-  
+
   if (!job) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -99,177 +103,151 @@ export default function BusinessJobDetailsPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      {/* Header */}
       <div className="mb-6">
-        <Button 
-          variant="outline" 
+        <Button
           onClick={() => router.back()}
+          variant="outline"
           className="mb-4"
         >
-          <ArrowLeft className="h-4 w-4 mr-2" />
+          <ArrowLeft className="w-4 h-4 mr-2" />
           Back to Jobs
         </Button>
-        
+
         <div className="flex justify-between items-start">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">{job.title}</h1>
-            <div className="flex items-center gap-4 text-sm text-gray-600">
+            <h1 className="text-3xl font-bold mb-2">{job.title}</h1>
+            <div className="flex items-center gap-4 text-gray-600">
               <div className="flex items-center gap-1">
-                <Calendar className="h-4 w-4" />
-                <span>Posted {formatDate(job.createdAt || new Date().toISOString())}</span>
+                <Calendar className="w-4 h-4" />
+                <span>Posted {formatDate(job.createdAt)}</span>
               </div>
-              <Badge className={getStatusColor(job.status)}>
-                {job.status === 'open' ? 'Active' : 'Closed'}
-              </Badge>
+              <div className="flex items-center gap-1">
+                <Clock className="w-4 h-4" />
+                <span>Updated {formatDate(job.updatedAt)}</span>
+              </div>
             </div>
           </div>
+
           <div className="flex gap-2">
+            <Badge className={getStatusColor(job.status)}>
+              {job.status === 'open' ? 'Open' : 'Closed'}
+            </Badge>
             <Button variant="outline" size="sm">
-              <Edit className="h-4 w-4 mr-2" />
-              Edit Job
-            </Button>
-            <Button variant="outline" size="sm">
-              <Eye className="h-4 w-4 mr-2" />
-              Preview
+              <Edit className="w-4 h-4 mr-2" />
+              Edit
             </Button>
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Main Content */}
+        {/* Job Details */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Job Description */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                Job Description
-              </CardTitle>
+              <CardTitle>Job Description</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">{job.description}</p>
+              <p className="text-gray-700 whitespace-pre-wrap">{job.description}</p>
             </CardContent>
           </Card>
 
-          {/* Skills Required */}
           <Card>
             <CardHeader>
-              <CardTitle>Required Skills</CardTitle>
+              <CardTitle>Skills Required</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-2">
-                {job.skillsRequired.map((skill, index) => (
-                  <Badge key={index} variant="outline" className="bg-blue-50 border-blue-200 text-blue-700">
-                    {skill}
+                {job.skills.map((skills, index) => (
+                  <Badge key={index} variant="secondary">
+                    {skills}
                   </Badge>
                 ))}
               </div>
             </CardContent>
           </Card>
 
-          {/* Milestones */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="h-5 w-5" />
-                Project Milestones
-              </CardTitle>
-              <CardDescription>
-                {job.milestones.length} milestone{job.milestones.length !== 1 ? 's' : ''} • Total: ${job.milestones.reduce((sum, m) => sum + m.amount, 0).toLocaleString()}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {job.milestones.map((milestone, index) => (
-                  <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                    <div className="flex-1">
-                      <h4 className="font-medium text-gray-900">{milestone.title}</h4>
-                      <p className="text-sm text-gray-600">
-                        Due: {formatDate(milestone.dueDate)}
-                      </p>
+          {job.milestones && job.milestones.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Project Milestones</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {job.milestones.map((milestone, index) => (
+                    <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                      <div>
+                        <h4 className="font-medium">{milestone.title}</h4>
+                        <p className="text-sm text-gray-600">
+                          Due: {formatDate(milestone.dueDate)}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold text-green-600">
+                          ${milestone.amount.toLocaleString()}
+                        </p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <div className="font-semibold text-green-600">${milestone.amount.toLocaleString()}</div>
-                      <div className="text-xs text-gray-500">Milestone {index + 1}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Sidebar */}
         <div className="space-y-6">
-          {/* Job Stats */}
           <Card>
             <CardHeader>
-              <CardTitle>Job Overview</CardTitle>
+              <CardTitle>Budget</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-gray-600">Budget Range</span>
-                <span className="font-semibold text-green-600">
+            <CardContent>
+              <div className="text-center">
+                <div className="text-3xl font-bold text-green-600 mb-2">
                   ${job.budgetMin.toLocaleString()} - ${job.budgetMax.toLocaleString()}
-                </span>
-              </div>
-              <Separator />
-              <div className="flex items-center justify-between">
-                <span className="text-gray-600">Milestones</span>
-                <span className="font-semibold">{job.milestones.length}</span>
-              </div>
-              <Separator />
-              <div className="flex items-center justify-between">
-                <span className="text-gray-600">Status</span>
-                <Badge className={getStatusColor(job.status)}>
-                  {job.status === 'open' ? 'Active' : 'Closed'}
-                </Badge>
-              </div>
-              <Separator />
-              <div className="flex items-center justify-between">
-                <span className="text-gray-600">Posted</span>
-                <span className="font-semibold">
-                  {new Date(job.createdAt || new Date()).toLocaleDateString()}
-                </span>
+                </div>
+                <p className="text-gray-600">Budget Range</p>
               </div>
             </CardContent>
           </Card>
 
-          {/* Quick Actions */}
           <Card>
             <CardHeader>
               <CardTitle>Quick Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <Button className="w-full" variant="outline">
-                <Edit className="h-4 w-4 mr-2" />
-                Edit Job
-              </Button>
-              <Button className="w-full" variant="outline">
-                <Users className="h-4 w-4 mr-2" />
+                <Eye className="w-4 h-4 mr-2" />
                 View All Proposals
               </Button>
               <Button className="w-full" variant="outline">
-                <Eye className="h-4 w-4 mr-2" />
-                Preview Public View
+                <Edit className="w-4 h-4 mr-2" />
+                Edit Job
+              </Button>
+              <Button className="w-full" variant="outline">
+                <Users className="w-4 h-4 mr-2" />
+                Share Job
               </Button>
             </CardContent>
           </Card>
         </div>
       </div>
 
+      <Separator className="my-8" />
+
       {/* Proposals Section */}
-      <div className="mt-12">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold text-gray-900">Proposals</h2>
-          <Button variant="outline">
-            <Users className="h-4 w-4 mr-2" />
-            View All Proposals
-          </Button>
-        </div>
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold mb-4">Proposals</h2>
         <ProposalList jobId={jobId} />
       </div>
     </div>
+  );
+}
+
+export default function BusinessJobDetailsPageWrapper() {
+  return (
+    <ProtectedRoute allowedRoles={['business']}>
+      <BusinessJobDetailsPage />
+    </ProtectedRoute>
   );
 }

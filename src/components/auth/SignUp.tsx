@@ -1,38 +1,45 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/context/AuthContext';
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
 export default function SignUpForm() {
-    const [name, setName] = useState(""); // Changed from username to name
-    const [phone, setPhone] = useState(""); // Changed from phoneNumber to phone
+    const [name, setName] = useState("");
+    const [phone, setPhone] = useState("");
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
     const [role, setRole] = useState("student");
     const [error, setError] = useState("");
+    const [loading, setLoading] = useState(false);
     const router = useRouter();
+    const { login } = useAuth();
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError("");
+        setLoading(true);
         
         // Basic validation
         if (!name || !email || !phone || !role || !password) {
             setError("Please fill in all required fields");
+            setLoading(false);
             return;
         }
         
         // Phone number validation (10 digits)
         if (!/^\d{10}$/.test(phone)) {
             setError("Phone number must be 10 digits");
+            setLoading(false);
             return;
         }
         
         if (password !== confirmPassword) {
             setError("Passwords do not match");
+            setLoading(false);
             return;
         }
         
@@ -40,9 +47,10 @@ export default function SignUpForm() {
             const response = await fetch('/api/auth/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
                 body: JSON.stringify({
-                    name, // Changed from username
-                    phone, // Changed from phoneNumber
+                    name,
+                    phone,
                     email,
                     password,
                     role
@@ -51,14 +59,26 @@ export default function SignUpForm() {
             
             const data = await response.json();
             
-            if (response.ok) {
-                // Redirect to login page on successful registration
-                router.push('./login');
+            if (response.ok && data.success) {
+                // Auto-login after successful registration
+                login(data.token || '', data.user);
+                
+                // Add a small delay to ensure AuthContext state is updated
+                setTimeout(() => {
+                  // Redirect based on user role
+                  if (data.user.role === 'student') {
+                      router.push('/dashboard/student');
+                  } else if (data.user.role === 'business') {
+                      router.push('/dashboard/business');
+                  }
+                }, 100);
             } else {
                 setError(data.error || 'Registration failed');
             }
         } catch (err) {
             setError('An error occurred. Please try again.');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -94,6 +114,7 @@ export default function SignUpForm() {
                                 onChange={(e) => setName(e.target.value)}
                                 className="bg-white/10 border-white/20 text-white placeholder:text-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/50 transition-all duration-200"
                                 required
+                                disabled={loading}
                             />
                         </div>
                         
@@ -109,6 +130,7 @@ export default function SignUpForm() {
                                 onChange={(e) => setPhone(e.target.value)}
                                 className="bg-white/10 border-white/20 text-white placeholder:text-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/50 transition-all duration-200"
                                 required
+                                disabled={loading}
                             />
                         </div>
                         
@@ -124,6 +146,7 @@ export default function SignUpForm() {
                                 onChange={(e) => setEmail(e.target.value)}
                                 className="bg-white/10 border-white/20 text-white placeholder:text-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/50 transition-all duration-200"
                                 required
+                                disabled={loading}
                             />
                         </div>
                         
@@ -136,6 +159,7 @@ export default function SignUpForm() {
                                 value={role}
                                 onChange={(e) => setRole(e.target.value)}
                                 className="w-full px-3 py-2 bg-white/10 border border-white/20 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400/50"
+                                disabled={loading}
                             >
                                 <option value="student" className="text-black">Student</option>
                                 <option value="business" className="text-black">Business</option>
@@ -154,6 +178,7 @@ export default function SignUpForm() {
                                 onChange={(e) => setPassword(e.target.value)}
                                 className="bg-white/10 border-white/20 text-white placeholder:text-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/50 transition-all duration-200"
                                 required
+                                disabled={loading}
                             />
                         </div>
                         
@@ -169,14 +194,16 @@ export default function SignUpForm() {
                                 onChange={(e) => setConfirmPassword(e.target.value)}
                                 className="bg-white/10 border-white/20 text-white placeholder:text-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/50 transition-all duration-200"
                                 required
+                                disabled={loading}
                             />
                         </div>
                         
                         <Button
                             type="submit"
                             className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold py-3 rounded-lg transition-all duration-200 hover:shadow-lg hover:shadow-blue-500/25 hover:-translate-y-0.5 active:scale-95"
+                            disabled={loading}
                         >
-                            Create Account
+                            {loading ? 'Creating Account...' : 'Create Account'}
                         </Button>
                     </form>
                     
@@ -186,6 +213,7 @@ export default function SignUpForm() {
                             <button
                                 onClick={handleNavigateToLogin}
                                 className="text-blue-400 hover:text-blue-300 font-medium transition-colors duration-200"
+                                disabled={loading}
                             >
                                 Log In
                             </button>

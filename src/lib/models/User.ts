@@ -6,11 +6,30 @@ const userSchema = new Schema({
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   role: { type: String, enum: ['student', 'business', 'admin'], required: true },
-  phone: { type: String, required: true }, // Make sure this is required
+  phone: { type: String, required: true },
   avatarUrl: { type: String },
   gstin: { type: String },
   ratingAvg: { type: Number, default: 0 },
   ratingCount: { type: Number, default: 0 },
+  // Additional fields for student profiles
+  bio: { type: String },
+  skills: [{ type: String }],
+  experience: { type: String, enum: ['0-1', '1-3', '3-5', '5-10', '10+'] },
+  portfolio: { type: String },
+  availability: { type: String },
+  education: [{
+    institution: String,
+    degree: String,
+    field: String,
+    startYear: Number,
+    endYear: Number
+  }],
+  projects: [{
+    title: String,
+    description: String,
+    technologies: [String],
+    url: String
+  }]
 }, { timestamps: true });
 
 // Hash password before saving

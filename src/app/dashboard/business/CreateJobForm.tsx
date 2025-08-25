@@ -15,7 +15,7 @@ export default function CreateJobForm({ onJobCreated }: { onJobCreated: (job: an
     businessId: user ? user.id : '', // Use 'id' instead of '_id'
     title: '',
     description: '',
-    skillsRequired: '',
+    skills: '',
     budgetMin: '',
     budgetMax: '',
   });
@@ -62,29 +62,44 @@ export default function CreateJobForm({ onJobCreated }: { onJobCreated: (job: an
         return;
       }
 
-      const skillsArray = formData.skillsRequired
+      const skillsArray = formData.skills
         .split(',')
         .map(skill => skill.trim())
         .filter(skill => skill);
 
+      // const jobData = {
+      //   ...formData,
+      //   skills: skillsArray,
+      //   budgetMin: Number(formData.budgetMin),
+      //   budgetMax: Number(formData.budgetMax),
+      //   milestones: milestones.map(m => ({
+      //     ...m,
+      //     amount: Number(m.amount),
+      //     dueDate: new Date(m.dueDate),
+      //   })),
+      // };
+
       const jobData = {
-        ...formData,
-        skillsRequired: skillsArray,
-        budgetMin: Number(formData.budgetMin),
-        budgetMax: Number(formData.budgetMax),
-        milestones: milestones.map(m => ({
-          ...m,
-          amount: Number(m.amount),
-          dueDate: new Date(m.dueDate),
-        })),
-      };
+  businessId: formData.businessId,
+  title: formData.title,
+  description: formData.description,
+  budgetMin: Number(formData.budgetMin),
+  budgetMax: Number(formData.budgetMax),
+  skills: skillsArray,
+  milestones: milestones.map(m => ({
+    ...m,
+    amount: Number(m.amount),
+    dueDate: new Date(m.dueDate),
+  })),
+};
+
 
       const response = await fetch('/api/jobs', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
         },
+        credentials: 'include',
         body: JSON.stringify(jobData),
       });
 
@@ -96,7 +111,7 @@ export default function CreateJobForm({ onJobCreated }: { onJobCreated: (job: an
           businessId: user ? user.id : '',
           title: '',
           description: '',
-          skillsRequired: '',
+          skills: '',
           budgetMin: '',
           budgetMax: '',
         });
@@ -147,12 +162,12 @@ export default function CreateJobForm({ onJobCreated }: { onJobCreated: (job: an
         </div>
         
         <div className="mb-4">
-          <label htmlFor="skillsRequired" className="block text-gray-700 mb-2">Skills Required (comma separated)</label>
+          <label htmlFor="skills" className="block text-gray-700 mb-2">Skills Required (comma separated)</label>
           <input
             type="text"
-            id="skillsRequired"
-            name="skillsRequired"
-            value={formData.skillsRequired}
+            id="skills"
+            name="skills"
+            value={formData.skills}
             onChange={handleChange}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="e.g., React, Node.js, MongoDB"

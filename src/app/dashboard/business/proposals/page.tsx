@@ -9,15 +9,13 @@ import { useAuth } from '@/context/AuthContext';
 export default function BusinessProposalsPage() {
   const [jobs, setJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const { token } = useAuth();
+  const { isAuthenticated } = useAuth();
 
   useEffect(() => {
     const fetchJobs = async () => {
       try {
         const response = await fetch('/api/jobs', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
+          credentials: 'include'
         });
         const data = await response.json();
         setJobs(data.jobs);
@@ -28,10 +26,10 @@ export default function BusinessProposalsPage() {
       }
     };
 
-    if (token) {
+    if (isAuthenticated) {
       fetchJobs();
     }
-  }, [token]);
+  }, [isAuthenticated]);
 
   if (loading) return <div>Loading proposals...</div>;
 

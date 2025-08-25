@@ -1,4 +1,14 @@
-import bcrypt from 'bcryptjs';
+import bcrypt from "bcryptjs";
+
+/**
+ * Hash a plain text password
+ * @param plainPassword The plain text password
+ * @returns Promise<string> The hashed password
+ */
+export async function hashPassword(plainPassword: string): Promise<string> {
+  const saltRounds = 10;
+  return bcrypt.hash(plainPassword, saltRounds);
+}
 
 /**
  * Compare a plain text password with a hashed password
@@ -10,10 +20,5 @@ export async function comparePassword(
   plainPassword: string,
   hashedPassword: string
 ): Promise<boolean> {
-  try {
-    return await bcrypt.compare(plainPassword, hashedPassword);
-  } catch (error) {
-    console.error('Error comparing passwords:', error);
-    throw new Error('Password comparison failed');
-  }
+  return bcrypt.compare(plainPassword, hashedPassword);
 }
