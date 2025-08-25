@@ -58,16 +58,24 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
-    const user = getUserFromRequest(request);
+    let user = getUserFromRequest(request);
+    if (!user) {
+      // Try to verify JWT from cookie (or Authorization header if present)
+      const { verifyAuthToken } = await import('@/lib/utils/auth');
+      const payload = await verifyAuthToken(request);
+      if (payload) {
+        user = { userId: payload.userId, role: payload.role as 'student' | 'business' };
+      }
+    }
     if (!user) {
       return createUnauthorizedResponse('Authentication required');
     }
 
-    const { userId, role } = verifyToken(token);
-    const { id: proposalId } = await params;
+    await dbConnect();
+    const proposalId = params.id;
     const { status, reason } = await request.json();
 
     const proposal = await Proposal.findById(proposalId);

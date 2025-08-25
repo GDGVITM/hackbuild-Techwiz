@@ -1085,7 +1085,6 @@ export default function BusinessDashboard() {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${currentToken}`,
           },
           credentials: 'include',
         });
@@ -1106,7 +1105,6 @@ export default function BusinessDashboard() {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${currentToken}`,
           },
           credentials: 'include',
         });
@@ -1143,23 +1141,17 @@ export default function BusinessDashboard() {
 
   const handleStatusChange = async (proposalId: string, newStatus: ApplicationStatus) => {
     try {
-      const currentToken = getToken();
-      if (!currentToken) {
-        setError('Authentication token not available');
-        return;
-      }
-
+      setError("");
       const response = await fetch(`/api/proposals/${proposalId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${currentToken}`,
         },
         credentials: 'include',
         body: JSON.stringify({ status: newStatus }),
       });
-
       if (response.ok) {
+        // Update the proposal status in state
         setProposals((prev) =>
           prev.map((proposal) =>
             proposal._id === proposalId ? { ...proposal, status: newStatus } : proposal
@@ -1221,7 +1213,6 @@ export default function BusinessDashboard() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${currentToken}`,
         },
         credentials: 'include',
         body: JSON.stringify(jobData),
