@@ -1,6 +1,4 @@
-<<<<<<< HEAD
-"use client";
-=======
+
 // 'use client';
 // import { useEffect, useState } from 'react';
 // import { useRouter } from 'next/navigation';
@@ -917,7 +915,6 @@
 // }
 
 'use client';
->>>>>>> 4801b69eec224ae3f8155a4ec7e48101b85455da
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -998,7 +995,7 @@ export default function BusinessDashboard() {
   const router = useRouter();
   const { user, token, isAuthenticated, loading: authLoading } = useAuth();
   const { toast } = useToast();
-  const { user, isAuthenticated, loading: authLoading } = useAuth();
+  // const { user, isAuthenticated, loading: authLoading } = useAuth();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [proposals, setProposals] = useState<JobApplication[]>([]);
   const [selectedApplication, setSelectedApplication] = useState<JobApplication | null>(null);
@@ -1030,42 +1027,49 @@ export default function BusinessDashboard() {
 
   // Check authentication and role
   useEffect(() => {
+  console.log('BusinessDashboard - Auth state:', {
+    isAuthenticated,
+    authLoading,
+    user,
+    hasToken: !!getToken(),
+  });
 
-    console.log('BusinessDashboard - Auth state:', { isAuthenticated, authLoading, user, hasToken: !!token });
-    // Add timeout for authentication check
-    console.log('BusinessDashboard - Auth state:', { isAuthenticated, authLoading, user, hasToken: !!getToken() });
+  const authTimeout = setTimeout(() => {
+    if (authLoading) {
+      const token = getToken();
+      console.log('BusinessDashboard - Token:', token);
 
-    const authTimeout = setTimeout(() => {
-      if (authLoading) {
-        const token = getToken();
+      if (token) {
+        console.log('BusinessDashboard - Using token from cookies');
+        setAuthChecking(false);
+        router.push('/dashboard/business');
 
-        if (token) {
-          console.log('BusinessDashboard - Using token from cookies');
-          setAuthChecking(false);
-        } else {
-          console.log('BusinessDashboard - No token in cookies, redirecting to login');
-          router.push('/auth/login');
-        }
-      }
-    }, 10000); // 10 second timeout
-    
-
-
-    if (!authLoading) {
-      clearTimeout(authTimeout);
-        console.log('BusinessDashboard - Not authenticated, redirecting to login');
+      } else {
+        console.log('BusinessDashboard - No token in cookies, redirecting to login');
         router.push('/auth/login');
       }
-      if (user.role !== 'business') {
-        console.log('BusinessDashboard - Wrong role, redirecting to unauthorized');
-        router.push('/unauthorized');
-        return;
-      }
-      console.log('BusinessDashboard - Authentication check passed');
-      setAuthChecking(false);
     }
-    return () => clearTimeout(authTimeout);
+  }, 10000); // 10 second timeout
+
+  if (!authLoading && !isAuthenticated) {
+    clearTimeout(authTimeout);
+    console.log('BusinessDashboard - Not authenticated, redirecting to login');
+    router.push('/auth/login');
+  }
+
+  if (user?.role !== 'business') {
+    console.log('BusinessDashboard - Wrong role, redirecting to unauthorized');
+    router.push('/unauthorized');
+    return; // exit effect early, but cleanup still runs
+  }
+
+  console.log('BusinessDashboard - Authentication check passed');
+  setAuthChecking(false);
+
+  // ✅ cleanup runs properly
+  return () => clearTimeout(authTimeout);
   }, [isAuthenticated, authLoading, user, router]);
+
 
   // Fetch data
   useEffect(() => {
@@ -1079,6 +1083,8 @@ export default function BusinessDashboard() {
         if (!currentToken) {
           console.log('BusinessDashboard - No token available in cookies');
           setError('Authentication token not available');
+          return;   // ✅ close the block here
+        }
    
 
         const fetchTimeout = setTimeout(() => {

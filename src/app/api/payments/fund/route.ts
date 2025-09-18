@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createPaymentIntent } from '@/lib/payments/stripe';
+// import { createPaymentIntent } from '@/lib/payments/stripe';
 import { verifyToken } from '@/lib/auth/jwt';
+import { createPaymentIntent } from '@/lib/payment/stripe';
 
 export async function POST(request: NextRequest) {
   try {
